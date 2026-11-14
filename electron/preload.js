@@ -36,6 +36,15 @@ contextBridge.exposeInMainWorld('host', {
   collabInvite: () => ipcRenderer.invoke('collab:invite'),
   resyncIssues: () => ipcRenderer.invoke('issues:resync'),
 
+  sshList: () => ipcRenderer.invoke('ssh:list'),
+  sshGenerate: (name) => ipcRenderer.invoke('ssh:generate', name),
+  sshImport: (name, privateKey) => ipcRenderer.invoke('ssh:import', { name, privateKey }),
+  sshRemove: (id) => ipcRenderer.invoke('ssh:remove', id),
+  sshAssign: (id) => ipcRenderer.invoke('ssh:assign', id),
+  sshUnassign: () => ipcRenderer.invoke('ssh:unassign'),
+  sshTest: (target) => ipcRenderer.invoke('ssh:test', target),
+  onSsh: (cb) => { ipcRenderer.on('ssh:update', (_e, s) => cb(s)); },
+
   evolutionGet: () => ipcRenderer.invoke('evolution:get'),
   evolutionRun: () => ipcRenderer.invoke('evolution:run'),
   evolutionApply: (id) => ipcRenderer.invoke('evolution:apply', id),

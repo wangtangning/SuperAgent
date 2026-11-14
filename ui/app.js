@@ -18,6 +18,7 @@ const PAGE_META = {
   connect: ['接入', 'GitHub：环境 → agent 账号 → 仓库 → 授权人 → 协作者 → 自检'],
   guide: ['指南', '刚下载？五分钟跑通：账号 → 接入 → 派活 → 进化'],
   settings: ['设置', '执行器、宿主路径与日志'],
+  ssh: ['密钥', 'SSH 密钥库：存储 → 分配给 agent'],
   engine: ['引擎', 'DeepSeek Harness 原生界面（高级）']
 };
 
@@ -108,6 +109,7 @@ function setPage(next) {
   if (next === 'evolution') refreshEvolution();
   if (next === 'connect') refreshGithub();
   if (next === 'settings') loadSettingsBlock();
+  if (next === 'ssh') refreshSsh();
 }
 
 /* ───────────────────────── 宿主状态 ───────────────────────── */
@@ -476,6 +478,7 @@ async function openTicket(id) {
       <div class="card-head"><span>工单详情</span><em>${esc(String(t.id).slice(0, 16))}</em></div>
       <div class="detail-title">${esc(t.title || t.id)}</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">${stagePill(t)}<span class="convo-meta">${esc(t.stage || '')}${t.action ? ' · ' + esc(t.action) : ''}</span></div>
+      ${await personActionHtml(t)}
       <div class="detail-grid">
         <div class="dcard"><div class="k">执行器</div><div class="v">${t.assignments || 0}</div></div>
         <div class="dcard"><div class="k">输入</div><div class="v">${t.inputs || 0}</div></div>
@@ -491,9 +494,103 @@ async function openTicket(id) {
       </div>`;
     $('tk-retry').onclick = async () => { try { await host.post(`tickets/${encodeURIComponent(id)}/retry`); toast('已重试'); refreshTickets(); } catch (e) { toast(e.message); } };
     $('tk-stop').onclick = async () => { try { await host.post(`tickets/${encodeURIComponent(id)}/stop`); toast('已停止'); refreshTickets(); } catch (e) { toast(e.message); } };
+    const prBtn = $('tk-open-pr');
+    if (prBtn) prBtn.onclick = () => host.openExternal(prBtn.dataset.url);
+    const thBtn = $('tk-open-thread');
+    if (thBtn) thBtn.onclick = () => { setPage('threads'); openThread(thBtn.dataset.key); };
   } catch (e) {
     $('ticket-detail').innerHTML = `<div class="empty sm"><span>${esc(e.message)}</span></div>`;
   }
+}
+
+/** 「等人」阶段的人话解释 + 下一步动作按钮。 */
+async function personActionHtml(t) {
+  if (t.stage !== 'person') return '';
+  const repo = (state && state.config && state.config.repository) || '';
+  const thread = (t.threads || [])[0] || {};
+  let prUrl = '';
+  if (thread.key && /^github:\d+$/.test(thread.key) && repo) {
+    const num = thread.key.slice(7);
+    try {
+      const d = await host.api(`threads/${encodeURIComponent(thread.key)}`);
+      const url = d.url || '';
+      prUrl = /\/pull\//.test(url) ? url : `https://github.com/${repo}/pull/${num}`;
+    } catch { prUrl = `https://github.com/${repo}/pull/${num}`; }
+  }
+  const threadBtn = thread.key ? `<button class="btn ghost sm" id="tk-open-thread" data-key="${esc(thread.key)}">去会话回复</button>` : '';
+  const map = {
+    review: {
+      text: 'agent 已完成工作并开了 PR，<b>等你评审合并</b>。打开 PR 看改动：没问题就 Merge（工单自动以 merged 结束并汇报）；要修改就在议题里回复它，它会继续改。',
+      btn: prUrl ? `<button class="btn sm" id="tk-open-pr" data-url="${esc(prUrl)}">打开 PR 评审</button>` : ''
+    },
+    answer: {
+      text: `agent 有问题等你回答：<b>${esc((t.attention && t.attention.question) || '')}</b> 去会话里回复它。`,
+      btn: threadBtn
+    },
+    blocked: {
+      text: 'agent 被卡住了（权限/资源/环境）。看下面的摘要，补齐它需要的东西后点「重试」，或在会话里回复说明。',
+      btn: threadBtn
+    },
+    failed: {
+      text: '这一轮执行失败。看摘要找原因；可以直接「重试」，或在会话里补充说明后再试。失败经验会进入进化页。',
+      btn: threadBtn
+    },
+    delivery: {
+      text: 'agent 的回复没能送达议题（网络/权限）。检查接入状态后重试。',
+      btn: ''
+    }
+  };
+  const m = map[t.action] || { text: '工单在等你处理。去会话看看上下文。', btn: threadBtn };
+  return `<div class="person-action"><div class="pa-text">${m.text}</div><div class="pa-btns">${m.btn}${m.btn && threadBtn ? threadBtn : ''}</div></div>`;
+}
+
+/* ───────────────────────── SSH 密钥库 ───────────────────────── */
+
+let ssh = null;
+
+async function refreshSsh() {
+  try { ssh = await host.sshList(); renderSsh(ssh); } catch (e) { toast(e.message); }
+}
+
+function renderSsh(s) {
+  if (!s) return;
+  ssh = s;
+  const assigned = s.keys.find((k) => k.id === s.assignedId);
+  $('ssh-assigned-note').textContent = assigned ? `agent 正在使用：${assigned.name}` : '未分配给 agent';
+  const box = $('ssh-list');
+  if (!s.keys.length) {
+    box.innerHTML = '<div class="empty bare"><span>还没有密钥。生成一把或导入已有私钥，然后分配给 agent。</span></div>';
+    return;
+  }
+  box.innerHTML = s.keys.map((k) => {
+    const on = k.id === s.assignedId;
+    return `<div class="ssh-key ${on ? 'on' : ''}">
+      <div class="ssh-key-head">
+        <b>${esc(k.name)}</b>
+        ${on ? '<span class="stage-pill done">agent 使用中</span>' : ''}
+        <span class="ssh-fp mono">${esc(k.fingerprint || '')}</span>
+      </div>
+      <div class="ssh-pub mono" title="公钥：贴到 GitHub / 服务器 authorized_keys">${esc(k.publicKey)}</div>
+      <div class="pa-btns">
+        <button class="btn ghost sm" data-ssh-act="copy" data-ssh-id="${esc(k.id)}">复制公钥</button>
+        ${on
+          ? '<button class="btn ghost sm" data-ssh-act="unassign" data-ssh-id="' + esc(k.id) + '">取消分配</button>'
+          : '<button class="btn sm" data-ssh-act="assign" data-ssh-id="' + esc(k.id) + '">分配给 agent</button>'}
+        <button class="btn ghost sm danger" data-ssh-act="remove" data-ssh-id="${esc(k.id)}">删除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function sshAction(act, id) {
+  const key = ssh && ssh.keys.find((k) => k.id === id);
+  try {
+    if (act === 'copy') { await navigator.clipboard.writeText(key.publicKey); toast('公钥已复制'); return; }
+    if (act === 'remove') { await host.sshRemove(id); toast('已删除'); }
+    if (act === 'assign') { toast('分配中，引擎会重启以注入密钥…'); await host.sshAssign(id); toast('已分配给 agent'); }
+    if (act === 'unassign') { await host.sshUnassign(); toast('已取消分配'); }
+    refreshSsh();
+  } catch (e) { toast(e.message); }
 }
 
 /* ───────────────────────── 新任务（会话页直接派活） ───────────────────────── */
@@ -823,6 +920,9 @@ document.addEventListener('click', async (e) => {
   const evoBtn = e.target.closest('[data-evo-act]');
   if (evoBtn) return evoAction(evoBtn.dataset.evoAct, evoBtn.dataset.evoId);
 
+  const sshBtn = e.target.closest('[data-ssh-act]');
+  if (sshBtn) return sshAction(sshBtn.dataset.sshAct, sshBtn.dataset.sshId);
+
   const segBtn = e.target.closest('.seg button');
   if (segBtn) {
     const seg = segBtn.parentElement;
@@ -929,6 +1029,25 @@ document.addEventListener('click', async (e) => {
   if (id === 'btn-collab-accept') {
     const repo = (state && state.config && state.config.repository) || '';
     return host.openExternal(`https://github.com/${repo}/invitations`);
+  }
+
+  // SSH 密钥库
+  if (id === 'btn-ssh-gen') {
+    const name = $('ssh-name').value.trim() || 'superagent';
+    toast('生成中…');
+    try { await host.sshGenerate(name); $('ssh-name').value = ''; toast('已生成并入库'); refreshSsh(); } catch (e) { toast(e.message); }
+    return;
+  }
+  if (id === 'btn-ssh-import-toggle') { $('ssh-import-row').hidden = !$('ssh-import-row').hidden; return; }
+  if (id === 'btn-ssh-import') {
+    try { await host.sshImport($('ssh-name').value.trim() || 'imported', $('ssh-import-text').value); $('ssh-import-text').value = ''; $('ssh-import-row').hidden = true; toast('已导入'); refreshSsh(); } catch (e) { toast(e.message); }
+    return;
+  }
+  if (id === 'btn-ssh-test') {
+    $('ssh-test-out').textContent = '测试中…';
+    try { const r = await host.sshTest($('ssh-test-target').value.trim() || 'git@github.com'); $('ssh-test-out').textContent = (r.ok ? '✓ 连接成功\n' : '✗ 未通过\n') + r.output; }
+    catch (e) { $('ssh-test-out').textContent = '✗ ' + e.message; }
+    return;
   }
 
   // GitHub
@@ -1057,6 +1176,7 @@ host.onLog((l) => {
 host.onUrl((u) => { if (state) state.url = u; loadEngine(u); });
 host.onGh((g) => renderGitHub(g));
 host.onEvolution((s) => { if (page === 'evolution') renderEvolution(s); else evo = s; });
+host.onSsh((s) => { if (page === 'ssh') renderSsh(s); else ssh = s; });
 
 /* ───────────────────────── 引导 ───────────────────────── */
 

@@ -53,6 +53,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.1"/><circle cx="10" cy="17" r="2.1"/></svg>
           <span>设置</span>
         </button>
+        <button class="nav-item" data-page="ssh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="3.5"/><path d="M10.5 11.5 19 3M15.5 6.5l3 3M13 9l2 2"/></svg>
+          <span>密钥</span>
+        </button>
         <button class="nav-item" data-page="engine">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="m8 10 2.2 2.2L8 14.4M12.6 14.6h3.4"/></svg>
           <span>引擎</span>
@@ -401,6 +405,13 @@
             </div>
 
             <div class="card">
+              <div class="card-head"><span>SSH 密钥（可选）</span><button class="link" data-goto="ssh">去密钥 →</button></div>
+              <div class="guide-body">
+                <p>agent 要碰私有 git 主机或部署服务器时：在「密钥」页生成/导入私钥（DPAPI 加密存储），点「分配给 agent」，执行器的 git/ssh 自动带上它；公钥复制去 GitHub/服务器登记。连接测试可验证。</p>
+              </div>
+            </div>
+
+            <div class="card">
               <div class="card-head"><span>常见问题</span></div>
               <div class="guide-body">
                 <p><b>派活了没反应？</b> 检查：授权人里有派活账号吗？协作者接受邀请了吗？接入页第 6 步自检绿了吗？旧议题点「接收已有议题」。</p>
@@ -448,6 +459,40 @@
           <div class="card">
             <div class="card-head"><span>宿主日志</span><em>最近 200 行 · 自动滚动</em></div>
             <pre class="logs" id="logs"></pre>
+          </div>
+        </section>
+
+        <!-- 密钥 -->
+        <section class="page" data-page="ssh">
+          <div class="card">
+            <div class="card-head"><span>SSH 密钥库</span><em>DPAPI 加密 · 仅本机</em></div>
+            <div class="guide-body">
+              <p>存 agent 要用的 SSH 私钥（私有 git 主机、部署服务器）。<b>分配给 agent</b> 后，执行器的 git/ssh 自动带上这把密钥；不碰你自己的 <code>~/.ssh</code>。公钥可以贴到 GitHub / GitLab / 服务器的 authorized_keys。</p>
+            </div>
+            <div class="step-actions">
+              <input id="ssh-name" placeholder="密钥名字，如 deploy-prod" style="max-width:220px" />
+              <button class="btn sm" id="btn-ssh-gen">生成新密钥</button>
+              <button class="btn ghost sm" id="btn-ssh-import-toggle">导入私钥</button>
+            </div>
+            <div class="form" id="ssh-import-row" hidden>
+              <label>粘贴私钥（-----BEGIN … PRIVATE KEY-----；暂不支持带口令）</label>
+              <textarea id="ssh-import-text" rows="4"></textarea>
+              <div class="row"><button class="btn sm" id="btn-ssh-import">导入</button></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span>我的密钥</span><em id="ssh-assigned-note"></em></div>
+            <div class="ssh-list" id="ssh-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span>连接测试</span><em>用分配给 agent 的密钥</em></div>
+            <div class="step-actions">
+              <input id="ssh-test-target" placeholder="git@github.com" style="max-width:260px" />
+              <button class="btn ghost sm" id="btn-ssh-test">测试</button>
+            </div>
+            <pre class="logs ssh-test-out" id="ssh-test-out"></pre>
           </div>
         </section>
 

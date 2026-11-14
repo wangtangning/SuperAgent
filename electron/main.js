@@ -19,6 +19,7 @@ const os = require('os');
 const { spawn } = require('child_process');
 const { EvolutionStore } = require('./evolution/store');
 const { EvolutionEngine } = require('./evolution/engine');
+const { SshVault } = require('./ssh-vault');
 
 const PROFILE = 'superagent';
 // 多项目并行：SUPERAGENT_PORT 换端口、SUPERAGENT_HOME 换数据目录，即可同机跑多个实例。
@@ -137,7 +138,24 @@ function dshEnv() {
   const env = Object.assign({}, process.env, { DSH_HOME, NO_COLOR: '1' });
   // 让 bundle 里的 gh 使用宿主自己的账号目录：用户不必碰 ~/.config/gh
   if (config.ghConfigDir) env.GH_CONFIG_DIR = config.ghConfigDir;
+  // 分配给 agent 的 SSH 密钥：执行器的 git/ssh 自动使用
+  if (sshVault) Object.assign(env, sshVault.env());
   return env;
+}
+
+/* ------------------------------- SSH 密钥库 ------------------------------- */
+
+let sshVault = null;
+function ensureSsh() {
+  if (sshVault) return sshVault;
+  sshVault = new SshVault({
+    dir: path.join(app.getPath('userData'), 'ssh'),
+    encrypt: (t) => encryptPayload(t),
+    decrypt: (p) => decryptToken(p),
+    log: (l) => log('[ssh] ' + l),
+    onChange: () => { if (win && !win.isDestroyed()) win.webContents.send('ssh:update', sshVault.list()); }
+  });
+  return sshVault;
 }
 
 /* ------------------------------ provisioning ------------------------------ */
@@ -1235,6 +1253,23 @@ ipcMain.handle('issue:create', (_e, { title, body }) => createIssue(title, body)
 ipcMain.handle('collab:status', () => collabStatus());
 ipcMain.handle('collab:invite', () => collabInvite());
 ipcMain.handle('issues:resync', () => resyncIssues());
+
+/* SSH 密钥库 */
+ipcMain.handle('ssh:list', () => ensureSsh().list());
+ipcMain.handle('ssh:generate', (_e, name) => ensureSsh().generate(name));
+ipcMain.handle('ssh:import', (_e, { name, privateKey }) => ensureSsh().importKey(name, privateKey));
+ipcMain.handle('ssh:remove', (_e, id) => ensureSsh().remove(String(id)));
+ipcMain.handle('ssh:assign', async (_e, id) => {
+  const r = ensureSsh().assign(String(id));
+  if (phase === 'running') { log('[ssh] 重启引擎以注入 GIT_SSH_COMMAND…'); await stop(); await start(); }
+  return r;
+});
+ipcMain.handle('ssh:unassign', async () => {
+  const r = ensureSsh().unassign();
+  if (phase === 'running') { await stop(); await start(); }
+  return r;
+});
+ipcMain.handle('ssh:test', (_e, target) => ensureSsh().test(target));
 
 /* 自我进化：全部走引擎，UI 只读快照 / 触发动作 */
 ipcMain.handle('evolution:get', () => ensureEvolution().snapshot());
