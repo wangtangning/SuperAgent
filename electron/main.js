@@ -754,42 +754,38 @@ async function resyncIssues(r) {
   const wasRunning = r.phase === 'running';
   if (wasRunning) await stop(r);
   const dbFile = path.join(r.stateDir, 'orchestrator.sqlite');
-  let db = null;
-  for (let i = 0; i < 6 && !db; i++) {
-    try { db = new (require('node:sqlite').DatabaseSync)(dbFile); }
-    catch { await new Promise((res) => setTimeout(res, 1000)); }
-  }
-  if (!db) {
-    // 进程已死但 WAL 锁残留：清掉 -wal/-shm 再试（最多丢最后几秒未落盘写入）
-    try { fs.rmSync(dbFile + '-wal', { force: true }); fs.rmSync(dbFile + '-shm', { force: true }); } catch {}
-    try { db = new (require('node:sqlite').DatabaseSync)(dbFile); } catch {}
-  }
-  if (!db) {
-    log(r, '重置读取基线失败：数据库仍被占用', 'error');
-    if (wasRunning) await start(r);
-    return { ok: false, error: '数据库仍被占用，请稍后重试' };
-  }
-  try {
+  // Electron 内置 node:sqlite 对 WAL 库有兼容问题：用外部 node 子进程回拨基线
+  const script = `
+    const fs = require('fs');
+    const { DatabaseSync } = require('node:sqlite');
+    const f = process.argv[2], back = process.argv[3];
+    let db = null;
+    for (let i = 0; i < 6 && !db; i++) { try { db = new DatabaseSync(f); } catch { require('child_process').execSync('timeout /t 1 /nobreak >nul', { shell: true }); } }
+    if (!db) { try { fs.rmSync(f + '-wal', { force: true }); fs.rmSync(f + '-shm', { force: true }); } catch {} db = new DatabaseSync(f); }
     db.prepare('UPDATE kv SET value = ? WHERE key = ?').run(JSON.stringify(back), 'github-since');
     for (const k of ['github-stream:issues', 'github-stream:comments', 'github-stream:review-comments']) {
       const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(k);
       if (!row) continue;
-      try {
-        const v = JSON.parse(row.value);
-        v.since = back;
-        if (v.started) for (const kind of Object.keys(v.started)) v.started[kind] = back;
-        delete v.etag;
-        db.prepare('UPDATE kv SET value = ? WHERE key = ?').run(JSON.stringify(v), k);
-      } catch {}
+      try { const v = JSON.parse(row.value); v.since = back; if (v.started) for (const kind of Object.keys(v.started)) v.started[kind] = back; delete v.etag; db.prepare('UPDATE kv SET value = ? WHERE key = ?').run(JSON.stringify(v), k); } catch {}
     }
-    log(r, '已回拨议题读取基线 7 天：现有开放议题将被接收');
-  } catch (e) {
-    log(r, '重置读取基线失败：' + e.message, 'error');
-    try { db.close(); } catch {}
+    db.close();
+    console.log('resync-ok');
+  `;
+  const tmp = path.join(os.tmpdir(), `sa-resync-${Date.now()}.js`);
+  fs.writeFileSync(tmp, script, 'utf8');
+  const out = await new Promise((resolve) => {
+    const c = spawn(process.execPath, [tmp, dbFile, back], { windowsHide: true, env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' }) });
+    let o = ''; c.stdout.on('data', (b) => o += b); c.stderr.on('data', (b) => o += b);
+    c.on('close', (code) => resolve({ code, o }));
+    setTimeout(() => { try { c.kill(); } catch {} resolve({ code: -1, o }); }, 30000);
+  });
+  fs.rmSync(tmp, { force: true });
+  if (out.code !== 0 || !out.o.includes('resync-ok')) {
+    log(r, '重置读取基线失败：' + out.o.slice(-200), 'error');
     if (wasRunning) await start(r);
-    return { ok: false, error: e.message };
+    return { ok: false, error: '重置基线失败：' + out.o.slice(-120) };
   }
-  try { db.close(); } catch {}
+  log(r, '已回拨议题读取基线 7 天：现有开放议题将被接收');
   if (wasRunning) { const res = await start(r); return { ok: !!res.ok, error: res.error }; }
   return { ok: true };
 }
