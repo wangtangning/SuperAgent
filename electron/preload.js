@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('host', {
   ghLogout: () => ipcRenderer.invoke('gh:logout'),
   openAuth: (uri) => ipcRenderer.invoke('gh:openAuth', uri),
   comment: (url, text) => ipcRenderer.invoke('thread:comment', { url, text }),
+  ghThreadComments: (url) => ipcRenderer.invoke('gh:threadComments', { url }),
   createIssue: (title, body) => ipcRenderer.invoke('issue:create', { title, body }),
   collabStatus: () => ipcRenderer.invoke('collab:status'),
   collabInvite: () => ipcRenderer.invoke('collab:invite'),

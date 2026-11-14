@@ -1066,6 +1066,30 @@ ipcMain.handle('gh:repos', () => listRepos(rt()));
 ipcMain.handle('gh:logout', () => logoutGithub(rt()));
 ipcMain.handle('gh:openAuth', (_e, uri) => shell.openExternal(uri));
 ipcMain.handle('thread:comment', (_e, { url, text }) => postComment(rt(), url, text));
+// 会话聚合：直接读 GitHub 上 issue/PR 的评论与评审（bundle 不接收 agent 自己的评论，UI 需补全显示）
+ipcMain.handle('gh:threadComments', async (_e, { url }) => {
+  const m = String(url || '').match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(issues|pull)\/(\d+)/i);
+  if (!m) return { ok: false, error: '不是 GitHub 议题/PR 地址' };
+  const [, owner, repo, kind, num] = m;
+  const r = rt();
+  const token = r.posterToken || r.agentToken;
+  if (!token) return { ok: false, error: '未登录 GitHub' };
+  const headers = { 'User-Agent': 'SuperAgent', accept: 'application/vnd.github+json', authorization: `Bearer ${token}` };
+  try {
+    const cres = await net.fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${num}/comments?per_page=100`, { headers });
+    const comments = await cres.json().catch(() => []);
+    let reviews = [];
+    if (kind === 'pull') {
+      const rres = await net.fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${num}/reviews?per_page=100`, { headers });
+      reviews = await rres.json().catch(() => []);
+    }
+    const items = [
+      ...(Array.isArray(comments) ? comments : []).map((c) => ({ id: 'c' + c.id, at: c.created_at, actor: c.user && c.user.login, human: true, text: c.body || '', url: c.html_url, kind: 'comment' })),
+      ...(Array.isArray(reviews) ? reviews : []).filter((v) => v.body).map((v) => ({ id: 'r' + v.id, at: v.submitted_at, actor: v.user && v.user.login, human: true, text: `[${v.state}] ${v.body}`, url: v.html_url, kind: 'review' }))
+    ].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    return { ok: true, items };
+  } catch (e) { return { ok: false, error: e.message.slice(0, 200) }; }
+});
 ipcMain.handle('issue:create', (_e, { title, body }) => createIssue(rt(), title, body));
 ipcMain.handle('collab:status', () => collabStatus(rt()));
 ipcMain.handle('collab:invite', () => collabInvite(rt()));

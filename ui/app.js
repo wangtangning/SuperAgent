@@ -403,10 +403,26 @@ async function openThread(key, silent) {
     const d = await host.api(`threads/${encodeURIComponent(key)}`);
     // 聚合关联 PR 线程：worker 的回复/评审往往在 PR 上，只看 issue 会像「没回复」
     const extra = [];
+    const prUrls = [];
     for (const c of (d.correlated || []).slice(0, 4)) {
       try {
         const cd = await host.api(`threads/${encodeURIComponent(c.key)}`);
+        if (cd.url && /\/pull\//.test(cd.url)) prUrls.push(cd.url);
         for (const m of (cd.timeline || [])) extra.push({ ...m, threadLabel: cd.title || c.title || c.key, threadKey: c.key });
+      } catch {}
+    }
+    // bundle 不接收 agent 自己的评论：直接从 GitHub 补全 issue/PR 的评论与评审
+    const ghUrls = [d.url, ...prUrls].filter((u) => u && /github\.com/.test(u));
+    // correlated 为空时，用手指/订阅里的 PR 线程兜底
+    if (!prUrls.length) {
+      for (const t of (d.tickets || []).slice(0, 3)) {
+        for (const th of (t.threads || [])) if (th.url && /\/pull\//.test(th.url) && !ghUrls.includes(th.url)) ghUrls.push(th.url);
+      }
+    }
+    for (const u of ghUrls.slice(0, 4)) {
+      try {
+        const r = await host.ghThreadComments(u);
+        if (r.ok) for (const it of r.items) extra.push({ id: it.id, at: it.at, actor: { id: it.actor }, human: it.actor !== (gh && gh.agentLogin), text: it.text, url: it.url, threadLabel: /\/pull\//.test(u) ? 'PR 评论' : '议题评论' });
       } catch {}
     }
     if (extra.length) {
