@@ -64,8 +64,9 @@ function loadProjects() {
   if (!projects.projects.length) {
     // 迁移：现有默认实例成为第一个项目
     projects.projects.push({
-      id: 'p-default', name: path.basename(path.join(__dirname, '..')) || 'SuperAgent',
-      folder: path.join(__dirname, '..'), repo: config.repository || '',
+      id: 'p-default', name: 'SuperAgent',
+      folder: app.isPackaged ? path.join(process.resourcesPath, '..') : path.join(__dirname, '..'),
+      repo: config.repository || '',
       port: 3082, home: path.join(os.homedir(), '.dsh'),
       verify: 'npm test', deploy: null, intake: null, createdAt: new Date().toISOString()
     });
@@ -352,7 +353,7 @@ function bundleInstalled() {
     const pkg = JSON.parse(fs.readFileSync(path.join(PROFILE_DIR, 'package.json'), 'utf8'));
     const dep = (pkg.dependencies && pkg.dependencies['dsh-superagent']) || '';
     const norm = (p) => p.replace(/\\/g, '/').toLowerCase();
-    return norm(dep).includes(norm(BUNDLE_DIR));
+    return norm(dep).includes(norm(BUNDLE_DIR)) || norm(dep).includes('bundles/dsh-superagent');
   } catch { return false; }
 }
 
@@ -363,8 +364,16 @@ async function ensureBundle() {
     log(errorText, 'error');
     return false;
   }
+  // 跨盘 link 时 pnpm 的相对 symlink 会算错层级：先复制到 profile 同盘同层再 link
+  let linkDir = BUNDLE_DIR;
+  try {
+    const staged = path.join(DSH_HOME, 'bundles', 'dsh-superagent');
+    fs.mkdirSync(path.dirname(staged), { recursive: true });
+    fs.cpSync(BUNDLE_DIR, staged, { recursive: true });
+    linkDir = staged;
+  } catch (e) { log('复制 bundle 到 DSH_HOME 失败，改用原路径：' + e.message, 'warn'); }
   log('安装 dsh-superagent bundle 到 superagent profile…');
-  const r = await runDsh(['plugin', '--profile', PROFILE, 'add', `link:${BUNDLE_DIR}`], { timeoutMs: 300000 });
+  const r = await runDsh(['plugin', '--profile', PROFILE, 'add', `link:${linkDir}`], { timeoutMs: 300000 });
   if (r.code !== 0 || !bundleInstalled()) {
     errorText = '安装 dsh-superagent bundle 失败（日志里有 pnpm 的原始输出）。';
     log(errorText, 'error');
