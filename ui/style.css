@@ -900,3 +900,14 @@ b.warn, .t-warn { color: var(--warn); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ssh-test-out { max-height: 120px; overflow: auto; margin-top: 10px; }
+
+/* ───────────────────────── 服务器表单 ───────────────────────── */
+
+.srv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.srv-grid label, .srv-form label { display: block; margin: 0 0 4px; font-size: 11px; color: var(--tx-3); }
+.srv-form input, .srv-form textarea {
+  width: 100%; background: rgba(0,0,0,0.26); border: 1px solid var(--line);
+  border-radius: var(--r-sm); padding: 7px 9px; color: var(--tx);
+}
+.srv-form textarea { margin-top: 2px; }
+.srv-form .row { margin-top: 12px; }

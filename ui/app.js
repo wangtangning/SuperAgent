@@ -19,6 +19,7 @@ const PAGE_META = {
   guide: ['指南', '刚下载？五分钟跑通：账号 → 接入 → 派活 → 进化'],
   settings: ['设置', '执行器、宿主路径与日志'],
   ssh: ['密钥', 'SSH 密钥库：存储 → 分配给 agent'],
+  servers: ['服务器', '局域网凭据库：IP/用户名/密码 → 分配给 agent 免问使用'],
   engine: ['引擎', 'DeepSeek Harness 原生界面（高级）']
 };
 
@@ -110,6 +111,7 @@ function setPage(next) {
   if (next === 'connect') refreshGithub();
   if (next === 'settings') loadSettingsBlock();
   if (next === 'ssh') refreshSsh();
+  if (next === 'servers') refreshServers();
 }
 
 /* ───────────────────────── 宿主状态 ───────────────────────── */
@@ -544,6 +546,60 @@ async function personActionHtml(t) {
   return `<div class="person-action"><div class="pa-text">${m.text}</div><div class="pa-btns">${m.btn}${m.btn && threadBtn ? threadBtn : ''}</div></div>`;
 }
 
+/* ───────────────────────── 局域网服务器 ───────────────────────── */
+
+let servers = null;
+
+async function refreshServers() {
+  try { servers = await host.serversList(); renderServers(servers); } catch (e) { toast(e.message); }
+}
+
+function renderServers(s) {
+  if (!s) return;
+  servers = s;
+  $('srv-assigned-note').textContent = s.assignedIds.length ? `已分配 ${s.assignedIds.length} 台给 agent` : '未分配';
+  const box = $('srv-list');
+  if (!s.servers.length) {
+    box.innerHTML = '<div class="empty bare"><span>还没有服务器。填 IP/用户名/密码保存，然后分配给 agent。</span></div>';
+    return;
+  }
+  box.innerHTML = s.servers.map((v) => {
+    const on = s.assignedIds.includes(v.id);
+    return `<div class="ssh-key ${on ? 'on' : ''}">
+      <div class="ssh-key-head">
+        <b>${esc(v.name)}</b>
+        ${on ? '<span class="stage-pill done">agent 可用</span>' : ''}
+        <span class="ssh-fp mono">${esc(v.username)}@${esc(v.host)}:${v.port} · ${v.auth === 'password' ? '密码' : '密钥'}</span>
+      </div>
+      ${v.note ? `<div class="evo-p-why">${esc(v.note)}</div>` : ''}
+      <div class="pa-btns">
+        <button class="btn ghost sm" data-srv-act="test" data-srv-id="${esc(v.id)}">测试连接</button>
+        ${on
+          ? '<button class="btn ghost sm" data-srv-act="unassign" data-srv-id="' + esc(v.id) + '">取消分配</button>'
+          : '<button class="btn sm" data-srv-act="assign" data-srv-id="' + esc(v.id) + '">分配给 agent</button>'}
+        <button class="btn ghost sm danger" data-srv-act="remove" data-srv-id="${esc(v.id)}">删除</button>
+      </div>
+      <pre class="logs ssh-test-out" id="srv-out-${esc(v.id)}" hidden></pre>
+    </div>`;
+  }).join('');
+}
+
+async function srvAction(act, id) {
+  try {
+    if (act === 'test') {
+      const out = $('srv-out-' + id);
+      out.hidden = false; out.textContent = '连接中…';
+      const r = await host.serversTest(id);
+      out.textContent = (r.ok ? '✓ 连接成功\n' : '✗ ') + r.output;
+      return;
+    }
+    if (act === 'assign') { toast('分配中，引擎重启注入 lan 助手…'); await host.serversAssign(id); toast('已分配：agent 可用 lan 命令登录'); }
+    if (act === 'unassign') { await host.serversUnassign(id); toast('已取消分配'); }
+    if (act === 'remove') { await host.serversRemove(id); toast('已删除'); }
+    refreshServers();
+  } catch (e) { toast(e.message); }
+}
+
 /* ───────────────────────── SSH 密钥库 ───────────────────────── */
 
 let ssh = null;
@@ -892,6 +948,14 @@ async function loadSettingsBlock() {
     if (document.activeElement !== $('f-prepare')) $('f-prepare').value = prep;
     settingsLoaded = true;
   } catch {}
+  try {
+    const rv = await host.reviewGet();
+    $('review-enabled').checked = !!rv.enabled;
+    if (rv.llm) {
+      $('review-baseurl').value = rv.llm.baseUrl || '';
+      $('review-model').value = rv.llm.model || '';
+    }
+  } catch {}
 }
 
 function renderLogs(lines) {
@@ -930,6 +994,9 @@ document.addEventListener('click', async (e) => {
 
   const sshBtn = e.target.closest('[data-ssh-act]');
   if (sshBtn) return sshAction(sshBtn.dataset.sshAct, sshBtn.dataset.sshId);
+
+  const srvBtn = e.target.closest('[data-srv-act]');
+  if (srvBtn) return srvAction(srvBtn.dataset.srvAct, srvBtn.dataset.srvId);
 
   const segBtn = e.target.closest('.seg button');
   if (segBtn) {
@@ -1039,6 +1106,22 @@ document.addEventListener('click', async (e) => {
     return host.openExternal(`https://github.com/${repo}/invitations`);
   }
 
+  // 服务器
+  if (id === 'btn-srv-add') {
+    try {
+      await host.serversAdd({
+        name: $('srv-name').value.trim(), host: $('srv-host').value.trim(),
+        port: $('srv-port').value.trim(), username: $('srv-user').value.trim(),
+        password: $('srv-pass').value, privateKey: $('srv-key').value.trim(),
+        note: $('srv-note').value.trim()
+      });
+      ['srv-name', 'srv-host', 'srv-port', 'srv-user', 'srv-pass', 'srv-key', 'srv-note'].forEach((x) => { $(x).value = ''; });
+      toast('服务器已保存（加密）');
+      refreshServers();
+    } catch (e) { toast(e.message); }
+    return;
+  }
+
   // SSH 密钥库
   if (id === 'btn-ssh-gen') {
     const name = $('ssh-name').value.trim() || 'superagent';
@@ -1139,6 +1222,18 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 评审 agent
+  if (id === 'btn-review-run') {
+    toast('评审一轮…');
+    try { const r = await host.reviewRun(); toast(r.acted && r.acted.length ? r.acted.map((a) => `PR#${a.pr}: ${a.verdict}`).join('；') : '没有待评审的工单'); } catch (e) { toast(e.message); }
+    return;
+  }
+  if (id === 'btn-review-save') {
+    const llm = $('review-baseurl').value.trim() ? { baseUrl: $('review-baseurl').value.trim(), model: $('review-model').value.trim(), apiKey: $('review-key').value.trim() } : null;
+    try { await host.reviewSettings({ enabled: $('review-enabled').checked, llm }); toast('评审设置已保存'); } catch (e) { toast(e.message); }
+    return;
+  }
+
   // 设置
   if (id === 'btn-pick-dir') {
     const dir = await host.pickDir();
@@ -1161,6 +1256,9 @@ $('repo-input').addEventListener('input', () => { repoDirty = true; });
 
 $('evo-enabled').addEventListener('change', async (e) => {
   try { await host.evolutionSettings({ enabled: e.target.checked }); toast(e.target.checked ? '进化已启用' : '进化已停用（经验仍会采集）'); } catch (err) { toast(err.message); }
+});
+$('review-enabled').addEventListener('change', async (e) => {
+  try { await host.reviewSettings({ enabled: e.target.checked }); toast(e.target.checked ? '自动评审已启用' : '自动评审已停用'); } catch (err) { toast(err.message); }
 });
 $('evo-autoapply').addEventListener('change', async (e) => {
   try { await host.evolutionSettings({ autoApply: e.target.checked }); toast(e.target.checked ? '安全提案将自动应用' : '所有提案都等你批准'); } catch (err) { toast(err.message); }
@@ -1185,6 +1283,7 @@ host.onUrl((u) => { if (state) state.url = u; loadEngine(u); });
 host.onGh((g) => renderGitHub(g));
 host.onEvolution((s) => { if (page === 'evolution') renderEvolution(s); else evo = s; });
 host.onSsh((s) => { if (page === 'ssh') renderSsh(s); else ssh = s; });
+host.onServers((s) => { if (page === 'servers') renderServers(s); else servers = s; });
 
 /* ───────────────────────── 引导 ───────────────────────── */
 

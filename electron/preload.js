@@ -44,6 +44,18 @@ contextBridge.exposeInMainWorld('host', {
   sshUnassign: () => ipcRenderer.invoke('ssh:unassign'),
   sshTest: (target) => ipcRenderer.invoke('ssh:test', target),
   sshRegisterGithub: (id) => ipcRenderer.invoke('ssh:registerGithub', id),
+
+  serversList: () => ipcRenderer.invoke('servers:list'),
+  serversAdd: (p) => ipcRenderer.invoke('servers:add', p),
+  serversRemove: (id) => ipcRenderer.invoke('servers:remove', id),
+  serversTest: (id) => ipcRenderer.invoke('servers:test', id),
+  serversAssign: (id) => ipcRenderer.invoke('servers:assign', id),
+  serversUnassign: (id) => ipcRenderer.invoke('servers:unassign', id),
+  onServers: (cb) => { ipcRenderer.on('servers:update', (_e, s) => cb(s)); },
+
+  reviewGet: () => ipcRenderer.invoke('review:get'),
+  reviewSettings: (patch) => ipcRenderer.invoke('review:settings', patch),
+  reviewRun: () => ipcRenderer.invoke('review:run'),
   onSsh: (cb) => { ipcRenderer.on('ssh:update', (_e, s) => cb(s)); },
 
   evolutionGet: () => ipcRenderer.invoke('evolution:get'),

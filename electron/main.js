@@ -20,6 +20,8 @@ const { spawn } = require('child_process');
 const { EvolutionStore } = require('./evolution/store');
 const { EvolutionEngine } = require('./evolution/engine');
 const { SshVault } = require('./ssh-vault');
+const { ServerVault } = require('./server-vault');
+const { ReviewAgent } = require('./review-agent');
 
 const PROFILE = 'superagent';
 // 多项目并行：SUPERAGENT_PORT 换端口、SUPERAGENT_HOME 换数据目录，即可同机跑多个实例。
@@ -140,7 +142,56 @@ function dshEnv() {
   if (config.ghConfigDir) env.GH_CONFIG_DIR = config.ghConfigDir;
   // 分配给 agent 的 SSH 密钥：执行器的 git/ssh 自动使用
   if (sshVault) Object.assign(env, sshVault.env());
+  // 分配给 agent 的局域网服务器：lan 助手上 PATH + 凭据文件位置
+  if (serverVault) Object.assign(env, serverVault.env(LAN_BIN_DIR()));
   return env;
+}
+
+/* ------------------------------ 局域网服务器库 ------------------------------ */
+
+const LAN_BIN_DIR = () => path.join(app.getPath('userData'), 'lan', 'bin');
+let serverVault = null;
+function ensureServers() {
+  if (serverVault) return serverVault;
+  serverVault = new ServerVault({
+    dir: path.join(app.getPath('userData'), 'lan'),
+    encrypt: (t) => encryptPayload(t),
+    decrypt: (p) => decryptToken(p),
+    log: (l) => log('[lan] ' + l),
+    onChange: () => { if (win && !win.isDestroyed()) win.webContents.send('servers:update', serverVault.list()); }
+  });
+  return serverVault;
+}
+
+/** 把 lan 助手铺到 userData/lan/bin（lan.cmd 用 ELECTRON_RUN_AS_NODE 跑自带 node）。 */
+function ensureLanHelper() {
+  const dir = LAN_BIN_DIR();
+  fs.mkdirSync(dir, { recursive: true });
+  const src = app.isPackaged
+    ? path.join(process.resourcesPath, 'scripts', 'lan-helper.js')
+    : path.join(__dirname, '..', 'scripts', 'lan-helper.js');
+  fs.copyFileSync(src, path.join(dir, 'lan-helper.js'));
+  const cmd = '@echo off\r\nsetlocal\r\nset "ELECTRON_RUN_AS_NODE=1"\r\n"' + process.execPath + '" "%~dp0lan-helper.js" %*\r\n';
+  fs.writeFileSync(path.join(dir, 'lan.cmd'), cmd, 'utf8');
+}
+
+/** 分配变化后：同步凭据文件 + 把服务器清单写进 agent 技能（无密码）。 */
+async function syncServerSkill() {
+  ensureLanHelper();
+  ensureServers().syncAssigned();
+  if (phase !== 'running') return;
+  try {
+    const view = await apiGet('prompts');
+    const cfg = JSON.parse(JSON.stringify(view.current.config));
+    const text = serverVault.skillText();
+    cfg.skills = cfg.skills || {};
+    if (text) cfg.skills['lan-servers'] = text;
+    else delete cfg.skills['lan-servers'];
+    if (JSON.stringify(cfg) !== JSON.stringify(view.current.config)) {
+      await apiPut('prompts', { config: cfg, baseRevision: view.current.revision });
+      log('[lan] 已更新 agent 的 lan-servers 技能');
+    }
+  } catch (e) { log('[lan] 同步技能失败：' + e.message, 'error'); }
 }
 
 /* ------------------------------- SSH 密钥库 ------------------------------- */
@@ -373,6 +424,8 @@ async function start() {
   emit();
   startEvolutionLoop();
   ensureEvolution().tick({ force: true }).catch(() => {});
+  startReviewLoop();
+  ensureReview().tick().catch(() => {});
   return { ok: true, url };
 }
 
@@ -391,6 +444,7 @@ function stop() {
   startedAt = null;
   lastState = null;
   stopEvolutionLoop();
+  stopReviewLoop();
   emit();
   return new Promise((resolve) => {
     let done = false;
@@ -498,6 +552,23 @@ async function applySetup(payload = {}) {
     const r = await apiPut('settings/policy', value, block.revision);
     results.push({ step: 'policy', ...r });
     config.allowed = allowed.map((a) => a.id);
+  }
+
+  // 分配了局域网服务器 → 给 Policy 加运维授权规则（只放行已存凭据的服务器）
+  if (serverVault && serverVault.list().assignedIds.length) {
+    const block = (await apiGet('settings')).blocks.policy;
+    const value = JSON.parse(JSON.stringify(block.value || {}));
+    value.rules = value.rules || [];
+    if (!value.rules.some((r) => r.id === 'lan-ops')) {
+      value.rules.push({
+        id: 'lan-ops',
+        name: 'LAN server maintenance',
+        enabled: true,
+        instruction: 'Explicit requests to inspect or maintain the LAN servers whose credentials are stored and assigned in this installation (see the lan-servers skill). Use the lan helper; never ask for or print passwords. Prefer read-only inspection first; destructive or service-affecting commands must be named in the ticket report.'
+      });
+      const r = await apiPut('settings/policy', value, block.revision);
+      results.push({ step: 'policy:lan-ops', ...r });
+    }
   }
 
   const dir = payload.directory ?? config.directory;
@@ -1145,6 +1216,59 @@ function stopEvolutionLoop() {
   if (evolutionTimer) { clearInterval(evolutionTimer); evolutionTimer = null; }
 }
 
+/* ------------------------------- 评审 agent ------------------------------- */
+
+let reviewAgent = null;
+let reviewTimer = null;
+
+function posterGh() {
+  const call = async (method, p, body, accept) => {
+    if (!posterToken) throw new Error('发单人未登录，评审 agent 无法操作 GitHub');
+    const res = await net.fetch('https://api.github.com/' + p, {
+      method,
+      headers: {
+        'User-Agent': 'SuperAgent',
+        accept: accept || 'application/vnd.github+json',
+        authorization: `Bearer ${posterToken}`,
+        ...(body ? { 'content-type': 'application/json' } : {})
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const text = await res.text();
+    let j = null; try { j = JSON.parse(text); } catch {}
+    if (!res.ok) throw new Error(`GitHub ${res.status}: ${(j && j.message) || text.slice(0, 120)}`);
+    return accept === 'application/vnd.github.diff' ? text : j;
+  };
+  return {
+    get: (p, opts) => call('GET', p, null, opts && opts.accept),
+    post: (p, b) => call('POST', p, b),
+    put: (p, b) => call('PUT', p, b)
+  };
+}
+
+function ensureReview() {
+  if (reviewAgent) return reviewAgent;
+  reviewAgent = new ReviewAgent({
+    api: { get: (p) => apiGet(p) },
+    gh: posterGh(),
+    store: ensureEvolution().store,
+    log: (l, lv) => log('[review] ' + l, lv),
+    onChange: () => { if (win && !win.isDestroyed()) win.webContents.send('review:update', reviewAgent.settings()); }
+  });
+  return reviewAgent;
+}
+
+function startReviewLoop() {
+  if (reviewTimer) return;
+  reviewTimer = setInterval(() => {
+    if (phase !== 'running') return;
+    ensureReview().tick().catch((e) => log('[review] tick 失败：' + e.message, 'error'));
+  }, 45000);
+}
+function stopReviewLoop() {
+  if (reviewTimer) { clearInterval(reviewTimer); reviewTimer = null; }
+}
+
 /* --------------------------------- 快照 --------------------------------- */
 
 function snapshot() {
@@ -1288,6 +1412,29 @@ ipcMain.handle('ssh:registerGithub', async (_e, id) => {
     return { ok: true, id: j.id };
   } catch (e) { return { ok: false, error: e.message.slice(0, 200) }; }
 });
+
+/* 局域网服务器凭据库 */
+ipcMain.handle('servers:list', () => ensureServers().list());
+ipcMain.handle('servers:add', (_e, p) => ensureServers().add(p || {}));
+ipcMain.handle('servers:remove', (_e, id) => ensureServers().remove(String(id)));
+ipcMain.handle('servers:test', (_e, id) => ensureServers().test(String(id)));
+ipcMain.handle('servers:assign', async (_e, id) => {
+  const r = ensureServers().assign(String(id));
+  await syncServerSkill();
+  if (phase === 'running') { log('[lan] 重启引擎以注入 lan 助手…'); await stop(); await start(); }
+  return r;
+});
+ipcMain.handle('servers:unassign', async (_e, id) => {
+  const r = ensureServers().unassign(String(id));
+  await syncServerSkill();
+  if (phase === 'running') { await stop(); await start(); }
+  return r;
+});
+
+/* 评审 agent */
+ipcMain.handle('review:get', () => ensureReview().settings());
+ipcMain.handle('review:settings', (_e, patch) => ensureReview().saveSettings(patch || {}));
+ipcMain.handle('review:run', () => ensureReview().tick());
 
 /* 自我进化：全部走引擎，UI 只读快照 / 触发动作 */
 ipcMain.handle('evolution:get', () => ensureEvolution().snapshot());

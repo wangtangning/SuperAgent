@@ -57,6 +57,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="3.5"/><path d="M10.5 11.5 19 3M15.5 6.5l3 3M13 9l2 2"/></svg>
           <span>密钥</span>
         </button>
+        <button class="nav-item" data-page="servers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="6.5" rx="1.8"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.8"/><path d="M7 7.2h.01M7 16.7h.01M11 7.2h3M11 16.7h3"/></svg>
+          <span>服务器</span>
+        </button>
         <button class="nav-item" data-page="engine">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="m8 10 2.2 2.2L8 14.4M12.6 14.6h3.4"/></svg>
           <span>引擎</span>
@@ -405,6 +409,13 @@
             </div>
 
             <div class="card">
+              <div class="card-head"><span>局域网服务器（运维场景）</span><button class="link" data-goto="servers">去服务器 →</button></div>
+              <div class="guide-body">
+                <p>「服务器」页存 IP/端口/用户名/密码（DPAPI 加密），分配给 agent 后它用 <code>lan run &lt;id&gt; "命令"</code> 自己登录干活，<b>不再问你密码</b>；密码只在本机助手认证时用，模型上下文只有清单。保存并自检后 Policy 自动加「LAN 运维」授权规则。</p>
+              </div>
+            </div>
+
+            <div class="card">
               <div class="card-head"><span>SSH 密钥（可选）</span><button class="link" data-goto="ssh">去密钥 →</button></div>
               <div class="guide-body">
                 <p>agent 要碰私有 git 主机或部署服务器时：在「密钥」页生成/导入私钥（DPAPI 加密存储），点「分配给 agent」，执行器的 git/ssh 自动带上它；公钥复制去 GitHub/服务器登记。连接测试可验证。</p>
@@ -457,6 +468,26 @@
           </div>
 
           <div class="card">
+            <div class="card-head"><span>评审 agent</span><em>person/review 自动评审</em></div>
+            <div class="guide-body">
+              <p>工单进入「等人评审」时，评审 agent 自动看 PR：改动小且聚焦、与请求相关、无敏感路径 → 以发单人身份合并；有问题 → 留评审意见让 worker 继续改；拿不准 → 留给你。</p>
+            </div>
+            <div class="step-actions">
+              <label class="evo-switch"><input type="checkbox" id="review-enabled" /><span>启用自动评审</span></label>
+              <button class="btn ghost sm" id="btn-review-run">立即评审一轮</button>
+            </div>
+            <div class="form" id="review-llm-form">
+              <label>可选：LLM 评审（OpenAI 兼容；不填用启发式）</label>
+              <div class="srv-grid">
+                <div><label>baseUrl</label><input id="review-baseurl" placeholder="https://api.deepseek.com/v1" /></div>
+                <div><label>model</label><input id="review-model" placeholder="deepseek-chat" /></div>
+                <div><label>apiKey</label><input id="review-key" type="password" placeholder="sk-…" /></div>
+              </div>
+              <div class="row"><button class="btn sm" id="btn-review-save">保存评审设置</button></div>
+            </div>
+          </div>
+
+          <div class="card">
             <div class="card-head"><span>宿主日志</span><em>最近 200 行 · 自动滚动</em></div>
             <pre class="logs" id="logs"></pre>
           </div>
@@ -494,6 +525,34 @@
               <button class="btn ghost sm" id="btn-ssh-test">测试</button>
             </div>
             <pre class="logs ssh-test-out" id="ssh-test-out"></pre>
+          </div>
+        </section>
+
+        <!-- 服务器 -->
+        <section class="page" data-page="servers">
+          <div class="card">
+            <div class="card-head"><span>局域网服务器</span><em>凭据 DPAPI 加密 · 密码不进模型</em></div>
+            <div class="guide-body">
+              <p>把常维护的服务器 IP/用户名/密码存这里，<b>分配给 agent</b> 后它用 <code>lan</code> 助手自己登录干活，不再问你密码。密码只在本机助手认证时使用，模型上下文里只有服务器清单。</p>
+            </div>
+            <div class="form srv-form">
+              <div class="srv-grid">
+                <div><label>名字</label><input id="srv-name" placeholder="如 nas / prod-web" /></div>
+                <div><label>IP / 主机</label><input id="srv-host" placeholder="192.168.1.10" /></div>
+                <div><label>端口</label><input id="srv-port" placeholder="22" /></div>
+                <div><label>用户名</label><input id="srv-user" placeholder="root" /></div>
+                <div><label>密码</label><input id="srv-pass" type="password" placeholder="密码（或下面贴私钥）" /></div>
+                <div><label>备注</label><input id="srv-note" placeholder="用途，如「群晖 NAS」" /></div>
+              </div>
+              <label>或私钥（可选）</label>
+              <textarea id="srv-key" rows="2" placeholder="-----BEGIN … PRIVATE KEY-----"></textarea>
+              <div class="row"><button class="btn sm" id="btn-srv-add">保存服务器</button></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span>我的服务器</span><em id="srv-assigned-note"></em></div>
+            <div class="ssh-list" id="srv-list"></div>
           </div>
         </section>
 
