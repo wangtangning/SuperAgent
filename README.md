@@ -81,7 +81,7 @@ npm install
 npm start
 ```
 
-或双击 `启动.bat`。绿色版：`dist\win-unpacked\SuperAgent.exe`（重新打包见下）。
+或双击 `启动.bat`。免安装版：`dist\win-unpacked\SuperAgent.exe`（重新打包见下）。
 
 ### 多项目并行
 
