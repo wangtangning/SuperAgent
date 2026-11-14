@@ -74,6 +74,13 @@ function loadProjects() {
     saveProjects();
   }
   if (!projects.activeId) projects.activeId = projects.projects[0].id;
+  // 旧版迁移遗留：名字/路径取自打包目录时修正
+  const def = projects.projects.find((p) => p.id === 'p-default');
+  if (def && /app\.asar|win-unpacked/.test(def.name + def.folder)) {
+    def.name = 'SuperAgent';
+    def.folder = app.isPackaged ? path.join(process.resourcesPath, '..', '..') : path.join(__dirname, '..');
+    saveProjects();
+  }
 }
 function saveProjects() {
   fs.mkdirSync(path.dirname(PROJECTS_FILE()), { recursive: true });
@@ -364,16 +371,16 @@ async function ensureBundle() {
     log(errorText, 'error');
     return false;
   }
-  // 跨盘 link 时 pnpm 的相对 symlink 会算错层级：先复制到 profile 同盘同层再 link
-  let linkDir = BUNDLE_DIR;
+  // 跨盘 link 时 pnpm 的相对 symlink 会算错层级：复制到 profile 同盘同层，直接 copy 安装（不用 link）
+  let installDir = BUNDLE_DIR;
   try {
     const staged = path.join(DSH_HOME, 'bundles', 'dsh-superagent');
     fs.mkdirSync(path.dirname(staged), { recursive: true });
     fs.cpSync(BUNDLE_DIR, staged, { recursive: true });
-    linkDir = staged;
+    installDir = staged;
   } catch (e) { log('复制 bundle 到 DSH_HOME 失败，改用原路径：' + e.message, 'warn'); }
   log('安装 dsh-superagent bundle 到 superagent profile…');
-  const r = await runDsh(['plugin', '--profile', PROFILE, 'add', `link:${linkDir}`], { timeoutMs: 300000 });
+  const r = await runDsh(['plugin', '--profile', PROFILE, 'add', installDir], { timeoutMs: 300000 });
   if (r.code !== 0 || !bundleInstalled()) {
     errorText = '安装 dsh-superagent bundle 失败（日志里有 pnpm 的原始输出）。';
     log(errorText, 'error');
