@@ -1,4 +1,4 @@
-# SuperAgent 指挥台（Windows）
+# SuperAgent 指挥台（Windows 桌面宿主）
 
 一个 Windows 桌面宿主：**底座是 DeepSeek Harness（dsh）**，跑的是一套值守编排 bundle（Ticket / Policy / Source / Executor）。
 宿主不重写业务，只做 Windows 上缺的那一层，并且把「人」这一端做成一个真正能用的入口。
