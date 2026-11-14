@@ -188,7 +188,7 @@ async function syncServerSkill() {
     if (text) cfg.skills['lan-servers'] = text;
     else delete cfg.skills['lan-servers'];
     if (JSON.stringify(cfg) !== JSON.stringify(view.current.config)) {
-      await apiPut('prompts', { config: cfg, baseRevision: view.current.revision });
+      await apiPut('prompts', cfg, view.current.revision);
       log('[lan] 已更新 agent 的 lan-servers 技能');
     }
   } catch (e) { log('[lan] 同步技能失败：' + e.message, 'error'); }
