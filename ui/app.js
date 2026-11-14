@@ -114,6 +114,44 @@ function setPage(next) {
   if (next === 'servers') refreshServers();
 }
 
+/* ───────────────────────── 项目框架 ───────────────────────── */
+
+let projectsData = null;
+
+async function refreshProjects() {
+  try { projectsData = await host.projectsList(); renderProjects(projectsData); } catch {}
+}
+
+function renderProjects(d) {
+  if (!d) return;
+  projectsData = d;
+  const sel = $('project-switcher');
+  sel.innerHTML = d.projects.map((p) => `<option value="${esc(p.id)}" ${p.id === d.activeId ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  const grid = $('proj-grid');
+  grid.innerHTML = d.projects.map((p) => `
+    <div class="proj-card ${p.id === d.activeId ? 'on' : ''}" data-proj="${esc(p.id)}">
+      <div class="proj-head"><b>${esc(p.name)}</b>${p.id === d.activeId ? '<span class="stage-pill run">当前</span>' : ''}</div>
+      <div class="proj-sub mono">${esc(p.repo || '本地项目')}</div>
+      <div class="proj-sub">${esc(p.folder || '')}</div>
+      <div class="proj-foot">
+        <span class="dot ${p.running ? 'ok' : ''}"></span><span>${p.running ? '引擎运行中' : '未运行'}</span>
+        ${p.id !== d.activeId ? '<button class="btn ghost sm" data-proj-switch="' + esc(p.id) + '">切换</button>' : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function doSwitchProject(id) {
+  toast('切换项目中，引擎重启…');
+  try {
+    const r = await host.projectsSwitch(id);
+    if (!r.ok) throw new Error(r.error || '切换失败');
+    settingsData = null; settingsLoaded = false;
+    renderHost(await host.get());
+    await refreshProjects();
+    toast('已切换到项目');
+  } catch (e) { toast(e.message); }
+}
+
 /* ───────────────────────── 宿主状态 ───────────────────────── */
 
 function renderHost(s) {
@@ -198,6 +236,7 @@ function renderHost(s) {
 
   renderGitHub(ghInfo);
   renderLogs(s.logs || []);
+  if (s.projects) renderProjects({ activeId: s.project && s.project.id, projects: s.projects.map((p) => ({ ...p, running: p.id === (s.project && s.project.id) && s.phase === 'running' })) });
 
   if (running) {
     if (page === 'overview') refreshOverview();
@@ -483,8 +522,8 @@ async function openTicket(id) {
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">${stagePill(t)}<span class="convo-meta">${esc(t.stage || '')}${t.action ? ' · ' + esc(t.action) : ''}</span></div>
       ${await personActionHtml(t)}
       <div class="detail-grid">
-        <div class="dcard"><div class="k">执行器</div><div class="v">${t.assignments || 0}</div></div>
-        <div class="dcard"><div class="k">输入</div><div class="v">${t.inputs || 0}</div></div>
+        <div class="dcard"><div class="k">执行器</div><div class="v">${Array.isArray(t.assignments) ? t.assignments.length : (t.assignments || 0)}</div></div>
+        <div class="dcard"><div class="k">输入</div><div class="v">${Array.isArray(t.inputs) ? t.inputs.length : (t.inputs || 0)}</div></div>
         <div class="dcard"><div class="k">强度</div><div class="v">${esc(t.strength || '—')}</div></div>
         <div class="dcard"><div class="k">更新</div><div class="v">${esc(ago(t.updatedAt))}</div></div>
       </div>
@@ -510,7 +549,7 @@ async function openTicket(id) {
 async function personActionHtml(t) {
   if (t.stage !== 'person') return '';
   const repo = (state && state.config && state.config.repository) || '';
-  const thread = (t.threads || [])[0] || {};
+  const thread = (t.threads || []).find((x) => /\/pull\/\d+/.test(x.url || '')) || (t.threads || [])[0] || {};
   let prUrl = '';
   if (thread.key && /^github:\d+$/.test(thread.key) && repo) {
     const num = thread.key.slice(7);
@@ -985,6 +1024,11 @@ document.addEventListener('click', async (e) => {
   const goto = e.target.closest('[data-goto]');
   if (goto) return setPage(goto.dataset.goto);
 
+  const projSwitch = e.target.closest('[data-proj-switch]');
+  if (projSwitch) return doSwitchProject(projSwitch.dataset.projSwitch);
+  const projCard = e.target.closest('.proj-card');
+  if (projCard && projCard.dataset.proj !== (projectsData && projectsData.activeId)) return doSwitchProject(projCard.dataset.proj);
+
   const th = e.target.closest('[data-thread]');
   if (th) return openThread(th.dataset.thread);
 
@@ -1224,6 +1268,33 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  // 项目框架
+  if (id === 'btn-add-project') { $('project-modal').hidden = false; $('proj-folder').focus(); return; }
+  if (id === 'btn-proj-cancel') { $('project-modal').hidden = true; return; }
+  if (id === 'btn-proj-pick') {
+    const f = await host.projectsPickFolder();
+    if (f) $('proj-folder').value = f;
+    return;
+  }
+  if (id === 'btn-proj-create') {
+    $('btn-proj-create').disabled = true;
+    try {
+      const r = await host.projectsAdd({
+        folder: $('proj-folder').value.trim(),
+        name: $('proj-name').value.trim(),
+        createGithub: $('proj-github').checked,
+        verify: $('proj-verify').value.trim()
+      });
+      if (!r.ok) throw new Error(r.error);
+      $('project-modal').hidden = true;
+      toast(r.project.repo ? `项目已添加并上传 ${r.project.repo}` : '项目已添加（本地）');
+      await refreshProjects();
+      await doSwitchProject(r.project.id);
+    } catch (e) { toast(e.message); }
+    finally { $('btn-proj-create').disabled = false; }
+    return;
+  }
+
   // 评审 agent
   if (id === 'btn-review-run') {
     toast('评审一轮…');
@@ -1254,6 +1325,7 @@ document.addEventListener('click', async (e) => {
 });
 
 $('thread-search').addEventListener('input', renderThreadList);
+$('project-switcher').addEventListener('change', (e) => doSwitchProject(e.target.value));
 $('repo-input').addEventListener('input', () => { repoDirty = true; });
 
 $('evo-enabled').addEventListener('change', async (e) => {

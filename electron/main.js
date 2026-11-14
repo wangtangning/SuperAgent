@@ -26,15 +26,15 @@ const { ReviewAgent } = require('./review-agent');
 const PROFILE = 'superagent';
 // 多项目并行：SUPERAGENT_PORT 换端口、SUPERAGENT_HOME 换数据目录，即可同机跑多个实例。
 // 一个 agent 账号可服务所有实例（分别加协作者）；同仓库多实例会重复处理，避免。
-const PORT = Number(process.env.SUPERAGENT_PORT || 3082);
-const DSH_HOME = process.env.SUPERAGENT_HOME || process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+let PORT = Number(process.env.SUPERAGENT_PORT || 3082);
+let DSH_HOME = process.env.SUPERAGENT_HOME || process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 // 每个实例独立的宿主数据目录（配置/登录/进化数据），默认实例保持原路径不变
-const INSTANCE_DIR = (PORT === 3082 && !process.env.SUPERAGENT_HOME)
+let INSTANCE_DIR = (PORT === 3082 && !process.env.SUPERAGENT_HOME)
   ? path.join(app.getPath('appData'), 'superagent-win')
   : path.join(app.getPath('appData'), `superagent-win-${PORT}`);
 app.setPath('userData', INSTANCE_DIR);
-const PROFILE_DIR = path.join(DSH_HOME, 'profiles', PROFILE);
-const STATE_DIR = path.join(DSH_HOME, 'state', PROFILE);
+let PROFILE_DIR = path.join(DSH_HOME, 'profiles', PROFILE);
+let STATE_DIR = path.join(DSH_HOME, 'state', PROFILE);
 const BUNDLE_DIR = app.isPackaged
   ? path.join(process.resourcesPath, 'bundle', 'dsh-superagent')
   : path.join(__dirname, '..', 'bundle', 'dsh-superagent');
@@ -53,6 +53,105 @@ let errorText = '';
 const logs = [];
 let startedAt = null;
 let lastState = null;
+
+/* ------------------------------- 项目注册表 ------------------------------- */
+
+const PROJECTS_FILE = () => path.join(app.getPath('appData'), 'superagent-win', 'projects.json');
+let projects = { activeId: '', projects: [] };
+
+function loadProjects() {
+  try { projects = JSON.parse(fs.readFileSync(PROJECTS_FILE(), 'utf8')); } catch { projects = { activeId: '', projects: [] }; }
+  if (!projects.projects.length) {
+    // 迁移：现有默认实例成为第一个项目
+    projects.projects.push({
+      id: 'p-default', name: path.basename(path.join(__dirname, '..')) || 'SuperAgent',
+      folder: path.join(__dirname, '..'), repo: config.repository || '',
+      port: 3082, home: path.join(os.homedir(), '.dsh'),
+      verify: 'npm test', deploy: null, intake: null, createdAt: new Date().toISOString()
+    });
+    projects.activeId = 'p-default';
+    saveProjects();
+  }
+  if (!projects.activeId) projects.activeId = projects.projects[0].id;
+}
+function saveProjects() {
+  fs.mkdirSync(path.dirname(PROJECTS_FILE()), { recursive: true });
+  fs.writeFileSync(PROJECTS_FILE(), JSON.stringify(projects, null, 2), 'utf8');
+}
+function activeProject() { return projects.projects.find((p) => p.id === projects.activeId) || projects.projects[0]; }
+
+/** 切换项目：停引擎 → 换端口/数据目录 → 重置单例 → 重载配置 → 起引擎。 */
+async function switchProject(id) {
+  const p = projects.projects.find((x) => x.id === id);
+  if (!p) return { ok: false, error: '项目不存在' };
+  if (p.id === projects.activeId && phase === 'running') return { ok: true, already: true };
+  await stop();
+  projects.activeId = p.id;
+  saveProjects();
+  PORT = p.port;
+  DSH_HOME = p.home;
+  INSTANCE_DIR = (p.port === 3082 && p.id === 'p-default')
+    ? path.join(app.getPath('appData'), 'superagent-win')
+    : path.join(app.getPath('appData'), `superagent-win-${p.port}`);
+  app.setPath('userData', INSTANCE_DIR);
+  PROFILE_DIR = path.join(DSH_HOME, 'profiles', PROFILE);
+  STATE_DIR = path.join(DSH_HOME, 'state', PROFILE);
+  evolution = null; sshVault = null; serverVault = null; reviewAgent = null;
+  config = { ghCli: '', ghConfigDir: '', repository: p.repo || '', allowed: [], directory: '', prepare: '', clientId: GITHUB_CLIENT_ID };
+  loadConfig();
+  const auth = loadAuth();
+  gh.auth.login = (auth && auth.login) || '';
+  if (p.repo) config.repository = p.repo;
+  const r = await start();
+  emit();
+  return { ok: !!r.ok, error: r.error, project: p };
+}
+
+/** 添加项目：登记文件夹；可选新建 GitHub 仓库并首推。 */
+async function addProject({ folder, name, createGithub, private: priv, verify }) {
+  const dir = String(folder || '').trim();
+  if (!dir || !fs.existsSync(dir)) return { ok: false, error: '文件夹不存在' };
+  const port = 3082 + projects.projects.length;
+  const p = {
+    id: 'p-' + Date.now().toString(36),
+    name: String(name || path.basename(dir)).slice(0, 60),
+    folder: dir, repo: '', port,
+    home: path.join(app.getPath('appData'), 'superagent-win-homes', 'p-' + port),
+    verify: String(verify || '').trim(), deploy: null, intake: null,
+    createdAt: new Date().toISOString()
+  };
+  // 探测
+  p.hasGit = fs.existsSync(path.join(dir, '.git'));
+  p.hasPackage = fs.existsSync(path.join(dir, 'package.json'));
+  if (!p.verify && p.hasPackage) p.verify = 'npm test';
+  if (createGithub) {
+    if (!posterToken) return { ok: false, error: '新建 GitHub 仓库需要发单人登录' };
+    const repoName = p.name.replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+    const created = await net.fetch('https://api.github.com/user/repos', {
+      method: 'POST',
+      headers: { 'User-Agent': 'SuperAgent', accept: 'application/vnd.github+json', authorization: `Bearer ${posterToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: repoName, private: priv !== false, auto_init: false })
+    });
+    const j = await created.json().catch(() => ({}));
+    if (!created.ok) return { ok: false, error: `GitHub ${created.status}: ${j.message || ''}`.slice(0, 200) };
+    p.repo = j.full_name;
+    // 首推：git init（若无）+ commit + push
+    const run = (cmd, args) => new Promise((res) => {
+      const c = spawn(cmd, args, { cwd: dir, windowsHide: true, env: Object.assign({}, process.env, { GH_CONFIG_DIR: config.ghConfigDir }) });
+      let out = ''; c.stdout.on('data', (b) => out += b); c.stderr.on('data', (b) => out += b);
+      c.on('close', (code) => res({ code, out }));
+    });
+    if (!p.hasGit) await run('git', ['init', '-b', 'main']);
+    await run('git', ['add', '-A']);
+    await run('git', ['-c', 'user.name=SuperAgent', '-c', 'user.email=agent@superagent.local', 'commit', '-m', 'Initial commit via SuperAgent']);
+    const push = await run('git', ['push', `https://github.com/${p.repo}.git`, 'HEAD:main']);
+    if (push.code !== 0) return { ok: false, error: '首推失败：' + push.out.slice(-200), project: p };
+  }
+  projects.projects.push(p);
+  saveProjects();
+  log(`项目已添加：${p.name}（${dir}）${p.repo ? ' → ' + p.repo : '（本地）'}`);
+  return { ok: true, project: p };
+}
 
 /* ------------------------------- 配置 ------------------------------- */
 
@@ -1289,7 +1388,9 @@ function snapshot() {
     state: lastState,
     hostLog: path.join(app.getPath('userData'), 'superagent-host.log'),
     config: { repository: config.repository, allowed: config.allowed, directory: config.directory, prepare: config.prepare },
-    github: Object.assign(ghSnapshot(), { cliConfigured: config.ghCli })
+    github: Object.assign(ghSnapshot(), { cliConfigured: config.ghCli }),
+    project: activeProject() ? { id: activeProject().id, name: activeProject().name, folder: activeProject().folder, repo: activeProject().repo, verify: activeProject().verify } : null,
+    projects: projects.projects.map((p) => ({ id: p.id, name: p.name, repo: p.repo, port: p.port }))
   };
 }
 
@@ -1444,6 +1545,22 @@ ipcMain.handle('review:get', () => {
 ipcMain.handle('review:settings', (_e, patch) => ensureReview().saveSettings(patch || {}));
 ipcMain.handle('review:run', () => ensureReview().tick());
 
+/* 项目框架 */
+ipcMain.handle('projects:list', () => ({ activeId: projects.activeId, projects: projects.projects.map((p) => ({ ...p, running: p.id === projects.activeId && phase === 'running' })) }));
+ipcMain.handle('projects:switch', (_e, id) => switchProject(String(id)));
+ipcMain.handle('projects:add', (_e, p) => addProject(p || {}));
+ipcMain.handle('projects:pickFolder', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('projects:update', (_e, { id, patch }) => {
+  const p = projects.projects.find((x) => x.id === id);
+  if (!p) return { ok: false, error: '项目不存在' };
+  Object.assign(p, patch || {});
+  saveProjects();
+  return { ok: true, project: p };
+});
+
 /* 自我进化：全部走引擎，UI 只读快照 / 触发动作 */
 ipcMain.handle('evolution:get', () => ensureEvolution().snapshot());
 ipcMain.handle('evolution:run', async () => { const r = await ensureEvolution().runNow(); return { result: r, snapshot: evolution.snapshot() }; });
@@ -1472,6 +1589,12 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     loadConfig();
+    loadProjects();
+    const act = activeProject();
+    if (act && act.id !== 'p-default') {
+      // 上次活跃的是非默认项目：直接切过去
+      await switchProject(act.id);
+    }
     applySystemProxy();
     const auth = loadAuth();
     if (auth && auth.login) gh.auth.login = auth.login;

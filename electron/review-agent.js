@@ -125,7 +125,8 @@ class ReviewAgent {
 
   async reviewTicket(t, cfg) {
     const detail = await this.api.get(`tickets/${encodeURIComponent(t.id)}`);
-    const thread = (detail.threads || [])[0] || {};
+    const threads = detail.threads || [];
+    const thread = threads.find((x) => /\/pull\/\d+/.test(x.url || '')) || threads.find((x) => /^github:\d+$/.test(x.key || '')) || {};
     const m = /^github:(\d+)$/.exec(thread.key || '');
     const repo = thread.url ? (thread.url.match(/github\.com\/([^/]+\/[^/]+)\//) || [])[1] : null;
     if (!m || !repo) return { verdict: 'uncertain', reason: '找不到 PR 线程' };

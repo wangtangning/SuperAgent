@@ -84,6 +84,7 @@
           <span class="tb-sub" id="page-sub"></span>
         </div>
         <div class="tb-right">
+          <select id="project-switcher" class="proj-select" title="切换项目"></select>
           <button class="chip clickable" id="chip-repo" title="在接入页修改仓库">未连接仓库</button>
           <span class="chip live" id="chip-live"><i></i><span>未启动</span></span>
           <div class="tb-actions">
@@ -97,6 +98,10 @@
       <div class="scroll" id="scroll">
         <!-- 概览 -->
         <section class="page active" data-page="overview">
+          <div class="card proj-panel">
+            <div class="card-head"><span>项目</span><button class="btn sm" id="btn-add-project">＋ 添加项目</button></div>
+            <div class="proj-grid" id="proj-grid"></div>
+          </div>
           <div class="banner" id="setup-banner" hidden>
             <div class="banner-icon">!</div>
             <div class="banner-body">
@@ -477,14 +482,16 @@
               <button class="btn ghost sm" id="btn-review-run">立即评审一轮</button>
             </div>
             <div class="form" id="review-llm-form">
-              <label>LLM 评审（可选覆盖）</label>
-              <p class="why" id="review-engine-note" style="margin:0 0 8px"></p>
-              <div class="srv-grid">
-                <div><label>baseUrl</label><input id="review-baseurl" placeholder="https://api.deepseek.com/v1" /></div>
-                <div><label>model</label><input id="review-model" placeholder="deepseek-chat" /></div>
-                <div><label>apiKey</label><input id="review-key" type="password" placeholder="sk-…" /></div>
-              </div>
-              <div class="row"><button class="btn sm" id="btn-review-save">保存评审设置</button></div>
+              <details class="evo-details">
+                <summary>LLM 评审覆盖（可选）</summary>
+                <p class="why" id="review-engine-note" style="margin:6px 0 8px"></p>
+                <div class="srv-grid">
+                  <div><label>baseUrl</label><input id="review-baseurl" placeholder="https://api.deepseek.com/v1" /></div>
+                  <div><label>model</label><input id="review-model" placeholder="deepseek-chat" /></div>
+                  <div><label>apiKey</label><input id="review-key" type="password" placeholder="留空 = 用引擎账号" autocomplete="off" /></div>
+                </div>
+                <div class="row"><button class="btn sm" id="btn-review-save">保存评审设置</button></div>
+              </details>
             </div>
           </div>
 
@@ -568,6 +575,28 @@
         </section>
       </div>
     </main>
+  </div>
+
+  <div class="modal" id="project-modal" hidden>
+    <div class="modal-card">
+      <div class="card-head"><span>添加项目</span><em>本地文件夹 → 可选 GitHub</em></div>
+      <div class="form">
+        <label>项目文件夹</label>
+        <div class="row">
+          <input id="proj-folder" placeholder="C:\…\my-project" />
+          <button class="btn ghost sm" id="btn-proj-pick">选择…</button>
+        </div>
+        <label>项目名</label>
+        <input id="proj-name" placeholder="留空 = 文件夹名" />
+        <label class="evo-switch" style="margin:10px 0"><input type="checkbox" id="proj-github" /><span>上传 GitHub（没有仓库就新建一个 private 仓库承接）</span></label>
+        <label>验收命令（自动改完跑它验收）</label>
+        <input id="proj-verify" placeholder="npm test / 自定义脚本" />
+        <div class="row">
+          <button class="btn" id="btn-proj-create">添加</button>
+          <button class="btn ghost" id="btn-proj-cancel">取消</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>

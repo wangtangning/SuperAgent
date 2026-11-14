@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('host', {
   reviewGet: () => ipcRenderer.invoke('review:get'),
   reviewSettings: (patch) => ipcRenderer.invoke('review:settings', patch),
   reviewRun: () => ipcRenderer.invoke('review:run'),
+
+  projectsList: () => ipcRenderer.invoke('projects:list'),
+  projectsSwitch: (id) => ipcRenderer.invoke('projects:switch', id),
+  projectsAdd: (p) => ipcRenderer.invoke('projects:add', p),
+  projectsPickFolder: () => ipcRenderer.invoke('projects:pickFolder'),
+  projectsUpdate: (id, patch) => ipcRenderer.invoke('projects:update', { id, patch }),
   onSsh: (cb) => { ipcRenderer.on('ssh:update', (_e, s) => cb(s)); },
 
   evolutionGet: () => ipcRenderer.invoke('evolution:get'),
