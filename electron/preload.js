@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('host', {
   refresh: () => ipcRenderer.invoke('host:refresh'),
   api: (path) => ipcRenderer.invoke('host:api', { path }),
   post: (path, body) => ipcRenderer.invoke('host:post', { path, body }),
+  put: (path, value, revision) => ipcRenderer.invoke('host:put', { path, value, revision }),
   saveSetup: (payload) => ipcRenderer.invoke('host:saveSetup', payload),
   setupCheck: () => ipcRenderer.invoke('host:setupCheck'),
   pause: (paused) => ipcRenderer.invoke('host:pause', paused),

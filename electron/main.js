@@ -459,7 +459,11 @@ async function applySetup(payload = {}) {
   if (repository) {
     const value = {
       enabled: true,
-      config: Object.assign({}, (gh && gh.value && gh.value.config) || {}, { repository, cli })
+      config: Object.assign({}, (gh && gh.value && gh.value.config) || {}, {
+        repository, cli,
+        // agent 账号不会自动 watch 仓库，通知流收不到自己仓库的议题；直接观察议题/评论流
+        observeIssues: true, observeComments: true
+      })
     };
     const r = await apiPut('settings/source:github', value, gh ? gh.revision : 0);
     results.push({ step: 'source:github', ...r });
@@ -1114,6 +1118,7 @@ ipcMain.handle('host:restart', async () => { await stop(); await new Promise((r)
 ipcMain.handle('host:refresh', async () => { await readState(); return snapshot(); });
 ipcMain.handle('host:api', async (_e, { path: p }) => apiGet(p));
 ipcMain.handle('host:post', async (_e, { path: p, body }) => { const r = await apiPost(p, body); await readState(); return r; });
+ipcMain.handle('host:put', async (_e, { path: p, value, revision }) => { const r = await apiPut(p, value, revision); await readState(); return r; });
 ipcMain.handle('host:saveSetup', async (_e, payload) => { const r = await applySetup(payload); await readState(); return r; });
 ipcMain.handle('host:setupCheck', async () => { const r = await apiPost('setup/check'); await waitHealthy(90000); await readState(); return r; });
 ipcMain.handle('host:pause', async (_e, paused) => { const r = await apiPost('executor/pause', { paused: !!paused }); await readState(); return r; });
