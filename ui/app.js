@@ -903,6 +903,8 @@ async function refreshGithub() {
 
 function renderGitHub(g) {
   if (!g) return;
+  // 周期快照不带 collab 字段：保留最近一次检测结果，避免状态「变回来」
+  if (!g.collab && gh && gh.collab) g.collab = gh.collab;
   gh = g;
 
   // step 1：环境
@@ -960,11 +962,15 @@ function renderGitHub(g) {
   $('collab-state').className = 'step-state ' + (collabOk ? 'ok' : collab ? 'warn' : '');
   $('btn-collab-invite').hidden = !!collabOk;
 
-  // step 5：选中但未保存时给出明确状态，避免「选了却像没选」
+  // step 5：选中但未保存时给出明确状态；已保存则显示真实自检结果
   const picked = ($('repo-input').value || '').trim();
+  const setupOk2 = !!(state && state.state && state.state.setup && !state.state.setup.problem);
   if (picked && picked !== repo) {
     $('apply-state').textContent = `待保存：${picked}`;
     $('apply-state').className = 'step-state warn';
+  } else if (setupOk2) {
+    $('apply-state').textContent = '已就绪 ✓';
+    $('apply-state').className = 'step-state ok';
   }
 
   // 步骤高亮
