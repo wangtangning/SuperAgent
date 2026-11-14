@@ -80,4 +80,6 @@ ui/app.js             进化页渲染与交互、仓库选择修复
 ui/style.css          进化页样式
 package.json          test/icon 脚本、win.icon、nsis 图标、files 增加 icon.png
 README.md             进化章节与目录更新
-```
+```多实例冒烟（2026-11-14）：SUPERAGENT_PORT=3083 + SUPERAGENT_HOME=.tmp/dsh-b 启动第二实例，
+3083 编排 API 就绪（health 可读），数据目录 superagent-win-3083 独立生成；
+默认实例 3082 同时 ready。测试后 B 已干净停止，A 保持运行。

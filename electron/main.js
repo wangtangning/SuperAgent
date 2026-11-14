@@ -21,8 +21,15 @@ const { EvolutionStore } = require('./evolution/store');
 const { EvolutionEngine } = require('./evolution/engine');
 
 const PROFILE = 'superagent';
-const PORT = 3082;
-const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+// 多项目并行：SUPERAGENT_PORT 换端口、SUPERAGENT_HOME 换数据目录，即可同机跑多个实例。
+// 一个 agent 账号可服务所有实例（分别加协作者）；同仓库多实例会重复处理，避免。
+const PORT = Number(process.env.SUPERAGENT_PORT || 3082);
+const DSH_HOME = process.env.SUPERAGENT_HOME || process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+// 每个实例独立的宿主数据目录（配置/登录/进化数据），默认实例保持原路径不变
+const INSTANCE_DIR = (PORT === 3082 && !process.env.SUPERAGENT_HOME)
+  ? path.join(app.getPath('appData'), 'superagent-win')
+  : path.join(app.getPath('appData'), `superagent-win-${PORT}`);
+app.setPath('userData', INSTANCE_DIR);
 const PROFILE_DIR = path.join(DSH_HOME, 'profiles', PROFILE);
 const STATE_DIR = path.join(DSH_HOME, 'state', PROFILE);
 const BUNDLE_DIR = app.isPackaged

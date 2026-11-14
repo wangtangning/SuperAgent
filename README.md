@@ -71,6 +71,21 @@ npm start
 
 或双击 `启动.bat`。绿色版：`dist\win-unpacked\SuperAgent.exe`（重新打包见下）。
 
+### 多项目并行
+
+账号与项目数无关：**一个 agent 账号加协作者后可服务任意多个仓库**。每个 bundle 实例盯一个仓库；
+同机并行多个实例用环境变量隔离（端口 / 数据目录 / 单实例锁都随之分开）：
+
+```bat
+set SUPERAGENT_PORT=3083
+set SUPERAGENT_HOME=%USERPROFILE%\.dsh-projectB
+dist\win-unpacked\SuperAgent.exe
+```
+
+第二个实例的登录/配置/进化数据在 `%APPDATA%\superagent-win-3083\`，用同一个 agent 账号登录、
+选另一个仓库即可。默认实例（3082）路径不变。同一仓库不要跑两个实例（会重复处理）。
+串行切换项目则更简单：接入页换仓库，一个实例轮流值守。
+
 ```bat
 npm run dist
 :: 产物 dist\SuperAgent <version>.exe（免安装）
