@@ -401,6 +401,19 @@ async function openThread(key, silent) {
   renderThreadList();
   try {
     const d = await host.api(`threads/${encodeURIComponent(key)}`);
+    // 聚合关联 PR 线程：worker 的回复/评审往往在 PR 上，只看 issue 会像「没回复」
+    const extra = [];
+    for (const c of (d.correlated || []).slice(0, 4)) {
+      try {
+        const cd = await host.api(`threads/${encodeURIComponent(c.key)}`);
+        for (const m of (cd.timeline || [])) extra.push({ ...m, threadLabel: cd.title || c.title || c.key, threadKey: c.key });
+      } catch {}
+    }
+    if (extra.length) {
+      const seen = new Set((d.timeline || []).map((m) => m.id));
+      const add = extra.filter((m) => !seen.has(m.id));
+      d.timeline = [...(d.timeline || []), ...add].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    }
     renderThread(d);
   } catch (e) {
     if (!silent) toast('读取会话失败：' + e.message);
@@ -438,6 +451,7 @@ function renderThread(d) {
       if (disp.fanout && disp.fanout.length) tags.push(`<span class="mini-tag ok">开单 ${disp.fanout.length}</span>`);
       if (disp.decision) tags.push(`<span class="mini-tag">决定：${esc(disp.decision.outcome || '')}</span>`);
       if (m.actions && m.actions.requeue) tags.push('<span class="mini-tag warn">可重判</span>');
+      if (m.threadLabel) tags.push(`<span class="mini-tag">${esc(m.threadLabel)}</span>`);
       return `<div class="msg ${m.human ? 'human' : ''}">
         <div class="who">${esc(initials)}</div>
         <div class="msg-main">
