@@ -358,7 +358,7 @@ function renderThreadList() {
         <span class="th-title">${esc(t.title || t.key)}</span>
       </div>
       <div class="th-preview">${esc(latest.preview || '—')}</div>
-      <div class="th-meta">${esc(latest.actor || '')}${latest.at ? ` · ${esc(ago(latest.at))}` : ''}${t.subscriptions ? ` · ${t.subscriptions} 张工单` : ''}</div>
+      <div class="th-meta">${esc((latest.actor && (latest.actor.name && (latest.actor.name.zh || latest.actor.name.en) || latest.actor.id)) || '')}${latest.at ? ` · ${esc(ago(latest.at))}` : ''}${t.subscriptions ? ` · ${t.subscriptions} 张工单` : ''}</div>
     </div>`;
   }).join('');
   if (!currentThread) renderConvoEmpty();
@@ -426,7 +426,8 @@ function renderThread(d) {
     body.innerHTML = '<div class="empty sm"><span>这个会话还没有消息。</span></div>';
   } else {
     body.innerHTML = items.map((m) => {
-      const name = (m.actor && (m.actor.name || m.actor.id || m.actor.login)) || (m.human ? '你' : 'agent');
+      const a = m.actor || {};
+      const name = (typeof a === 'string' ? a : (a.name && (a.name.zh || a.name.en)) || a.id || a.login) || (m.human ? '你' : 'agent');
       const initials = String(name).replace(/[^A-Za-z0-9\u4e00-\u9fa5]/g, '').slice(0, 2).toUpperCase() || '·';
       const disp = m.disposition || {};
       const tags = [];
@@ -501,8 +502,17 @@ let currentTicket = null;
 async function refreshTickets() {
   if (!state || state.phase !== 'running') return;
   try {
-    const r = await host.api(`tickets?state=${ticketFilter === 'all' ? 'all' : ticketFilter}&limit=100`);
-    const items = r.items || [];
+    let items;
+    if (ticketFilter === 'all') {
+      const [a, b] = await Promise.all([
+        host.api('tickets?state=open&limit=100').catch(() => ({ items: [] })),
+        host.api('tickets?state=ended&limit=100').catch(() => ({ items: [] }))
+      ]);
+      items = [...(a.items || []), ...(b.items || [])];
+    } else {
+      const r = await host.api(`tickets?state=${ticketFilter}&limit=100`);
+      items = r.items || [];
+    }
     $('ticket-count').textContent = `${items.length} 张`;
     const box = $('ticket-list');
     if (!items.length) {
