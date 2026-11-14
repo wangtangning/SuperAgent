@@ -426,6 +426,7 @@ async function start() {
   ensureEvolution().tick({ force: true }).catch(() => {});
   startReviewLoop();
   ensureReview().tick().catch(() => {});
+  syncServerSkill().catch(() => {});
   return { ok: true, url };
 }
 
