@@ -969,3 +969,9 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 .assign-row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .assign-row span { display: flex; flex-direction: column; }
 .assign-sub { font-style: normal; font-size: 10.5px; color: var(--tx-3); }
+
+/* 分配弹窗行：覆盖 .modal-card input 的 width:100% */
+.modal-card .assign-row { display: flex; align-items: center; gap: 10px; }
+.modal-card .assign-row input[type="checkbox"] { width: 15px; height: 15px; flex: none; margin: 0; }
+.modal-card .assign-row span { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; color: var(--tx); font-size: 12.5px; }
+.modal-card .assign-row .assign-sub { font-size: 10.5px; color: var(--tx-3); }
