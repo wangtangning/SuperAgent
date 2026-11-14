@@ -125,8 +125,14 @@ async function refreshProjects() {
 function renderProjects(d) {
   if (!d) return;
   projectsData = d;
-  const sel = $('project-switcher');
-  sel.innerHTML = d.projects.map((p) => `<option value="${esc(p.id)}" ${p.id === d.activeId ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  const active = d.projects.find((p) => p.id === d.activeId);
+  $('proj-switch-name').textContent = active ? active.name : '项目';
+  $('proj-switch-menu').innerHTML = d.projects.map((p) => `
+    <button class="proj-switch-item ${p.id === d.activeId ? 'on' : ''}" data-proj-switch="${esc(p.id)}">
+      <b>${esc(p.name)}</b>
+      <span>${esc(p.repo || '本地项目')} · :${p.port}</span>
+      ${p.id === d.activeId ? '<i>当前</i>' : ''}
+    </button>`).join('');
   const grid = $('proj-grid');
   grid.innerHTML = d.projects.map((p) => `
     <div class="proj-card ${p.id === d.activeId ? 'on' : ''}" data-proj="${esc(p.id)}">
@@ -141,14 +147,17 @@ function renderProjects(d) {
 }
 
 async function doSwitchProject(id) {
-  toast('切换项目中，引擎重启…');
+  $('proj-switch-menu').hidden = true;
   try {
     const r = await host.projectsSwitch(id);
     if (!r.ok) throw new Error(r.error || '切换失败');
     settingsData = null; settingsLoaded = false;
     renderHost(await host.get());
     await refreshProjects();
-    toast('已切换到项目');
+    if (page === 'threads') refreshThreads();
+    if (page === 'tickets') refreshTickets();
+    if (page === 'evolution') refreshEvolution();
+    if (page === 'overview') refreshOverview();
   } catch (e) { toast(e.message); }
 }
 
@@ -1325,7 +1334,14 @@ document.addEventListener('click', async (e) => {
 });
 
 $('thread-search').addEventListener('input', renderThreadList);
-$('project-switcher').addEventListener('change', (e) => doSwitchProject(e.target.value));
+$('proj-switch-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const m = $('proj-switch-menu');
+  m.hidden = !m.hidden;
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#proj-switch')) $('proj-switch-menu').hidden = true;
+});
 $('repo-input').addEventListener('input', () => { repoDirty = true; });
 
 $('evo-enabled').addEventListener('change', async (e) => {

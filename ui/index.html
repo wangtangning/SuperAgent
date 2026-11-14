@@ -84,7 +84,13 @@
           <span class="tb-sub" id="page-sub"></span>
         </div>
         <div class="tb-right">
-          <select id="project-switcher" class="proj-select" title="切换项目"></select>
+          <div class="proj-switch" id="proj-switch">
+            <button class="proj-switch-btn" id="proj-switch-btn" title="切换项目">
+              <span id="proj-switch-name">项目</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="proj-switch-menu" id="proj-switch-menu" hidden></div>
+          </div>
           <button class="chip clickable" id="chip-repo" title="在接入页修改仓库">未连接仓库</button>
           <span class="chip live" id="chip-live"><i></i><span>未启动</span></span>
           <div class="tb-actions">
