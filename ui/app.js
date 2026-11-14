@@ -920,8 +920,8 @@ function renderGitHub(g) {
     $('gh-progress-text').textContent = `${g.install.msg || ''} ${g.install.pct || 0}%`;
   }
 
-  // step 2：agent 账号
-  const login = g.agentLogin || g.login || '';
+  // step 2：agent 账号（全局身份，所有项目共用）
+  const login = g.agentLogin || '';
   const pending = !!(g.auth && g.auth.pending);
   const authErr = (g.auth && g.auth.error) || '';
   $('login-state').textContent = login ? `已登录 @${login}` : pending ? '等待浏览器授权…' : authErr || '未登录';

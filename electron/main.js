@@ -87,6 +87,7 @@ function makeRuntime(p) {
   if (p.repo && !rt.config.repository) rt.config.repository = p.repo;
   loadAuth(rt);
   rt.gh.auth.login = rt.agentLogin || rt.posterLogin || '';
+  if (rt.agentLogin && rt.agentToken) writeAgentToGhConfig(rt);
   runtimes.set(p.id, rt);
   return rt;
 }
@@ -124,14 +125,22 @@ function decryptToken(payload) {
     : Buffer.from(String(payload || '').replace(/^plain:/, ''), 'base64').toString('utf8');
 }
 function loadAuth(r) {
-  try {
-    const j = JSON.parse(fs.readFileSync(path.join(r.userData, 'auth.json'), 'utf8'));
-    r.posterToken = decryptToken(j.token); r.posterLogin = j.login || ''; r.authToken = r.posterToken;
-  } catch { r.posterToken = ''; r.posterLogin = ''; r.authToken = ''; }
-  try {
-    const a = JSON.parse(fs.readFileSync(path.join(r.userData, 'agent-auth.json'), 'utf8'));
-    r.agentToken = decryptToken(a.token); r.agentLogin = a.login || '';
-  } catch { r.agentToken = ''; r.agentLogin = ''; }
+  // 身份全局共享（所有项目同一发单人 + 同一 agent）；旧版每项目存储自动迁移
+  const read = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+  let pj = read(path.join(SHARED_DIR, 'auth.json'));
+  let aj = read(path.join(SHARED_DIR, 'agent-auth.json'));
+  if (!pj || !aj) {
+    for (const dir of [r.userData, ...[...runtimes.values()].map((x) => x.userData), SHARED_DIR]) {
+      if (!pj) pj = read(path.join(dir, 'auth.json'));
+      if (!aj) aj = read(path.join(dir, 'agent-auth.json'));
+    }
+    if (pj) { try { fs.mkdirSync(SHARED_DIR, { recursive: true }); fs.writeFileSync(path.join(SHARED_DIR, 'auth.json'), JSON.stringify(pj), 'utf8'); } catch {} }
+    if (aj) { try { fs.mkdirSync(SHARED_DIR, { recursive: true }); fs.writeFileSync(path.join(SHARED_DIR, 'agent-auth.json'), JSON.stringify(aj), 'utf8'); } catch {} }
+  }
+  if (pj) { r.posterToken = decryptToken(pj.token); r.posterLogin = pj.login || ''; r.authToken = r.posterToken; }
+  else { r.posterToken = ''; r.posterLogin = ''; r.authToken = ''; }
+  if (aj) { r.agentToken = decryptToken(aj.token); r.agentLogin = aj.login || ''; }
+  else { r.agentToken = ''; r.agentLogin = ''; }
   const inAllowed = (l) => (r.config.allowed || []).some((x) => String(x).toLowerCase() === String(l).toLowerCase());
   if (r.posterLogin && !inAllowed(r.posterLogin) && r.agentLogin && r.posterLogin.toLowerCase() === r.agentLogin.toLowerCase()) {
     r.posterLogin = ''; r.posterToken = ''; r.authToken = '';
@@ -139,8 +148,9 @@ function loadAuth(r) {
 }
 function saveAuth(r, login, token) {
   r.authToken = token || '';
-  try { fs.writeFileSync(path.join(r.userData, 'auth.json'), JSON.stringify({ login, token: encryptPayload(token), at: Date.now() }), 'utf8'); }
+  try { fs.mkdirSync(SHARED_DIR, { recursive: true }); fs.writeFileSync(path.join(SHARED_DIR, 'auth.json'), JSON.stringify({ login, token: encryptPayload(token), at: Date.now() }), 'utf8'); }
   catch (e) { log(r, '保存登录信息失败：' + e.message, 'error'); }
+  for (const x of runtimes.values()) { x.posterLogin = login; x.posterToken = token; x.authToken = token; }
 }
 function writeHostsYml(r, login, token) {
   fs.mkdirSync(r.config.ghConfigDir, { recursive: true });
@@ -159,10 +169,12 @@ function assignAuthRole(r, login, token) {
   if (isPoster) { r.posterLogin = login; r.posterToken = token; r.authToken = token; saveAuth(r, login, token); }
   else {
     r.agentLogin = login; r.agentToken = token;
-    try { fs.writeFileSync(path.join(r.userData, 'agent-auth.json'), JSON.stringify({ login, token: encryptPayload(token), at: Date.now() }), 'utf8'); }
+    try { fs.mkdirSync(SHARED_DIR, { recursive: true }); fs.writeFileSync(path.join(SHARED_DIR, 'agent-auth.json'), JSON.stringify({ login, token: encryptPayload(token), at: Date.now() }), 'utf8'); }
     catch (e) { log(r, '保存 agent 登录失败：' + e.message, 'error'); }
+    for (const x of runtimes.values()) { x.agentLogin = login; x.agentToken = token; }
   }
-  if (r.agentLogin && r.agentToken) writeAgentToGhConfig(r);
+  // 每个项目的 gh-config 都写 agent 身份（bundle 的 gh 用它）
+  for (const x of runtimes.values()) if (x.agentLogin && x.agentToken) writeAgentToGhConfig(x);
 }
 
 /* ------------------------------- gh CLI（共享工具） ------------------------------- */
@@ -699,10 +711,12 @@ async function listRepos(r) {
   } catch (e) { return { ok: false, error: e.message.slice(0, 300) }; }
 }
 async function logoutGithub(r) {
-  r.agentLogin = ''; r.agentToken = '';
-  try { fs.rmSync(path.join(r.userData, 'agent-auth.json'), { force: true }); } catch {}
-  try { fs.rmSync(path.join(r.config.ghConfigDir, 'hosts.yml'), { force: true }); } catch {}
-  r.gh.auth.login = '';
+  try { fs.rmSync(path.join(SHARED_DIR, 'agent-auth.json'), { force: true }); } catch {}
+  for (const x of runtimes.values()) {
+    x.agentLogin = ''; x.agentToken = '';
+    try { fs.rmSync(path.join(x.config.ghConfigDir, 'hosts.yml'), { force: true }); } catch {}
+    x.gh.auth.login = x.posterLogin || '';
+  }
   emitGh(r);
   return { ok: true };
 }
