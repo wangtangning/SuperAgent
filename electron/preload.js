@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('host', {
   ghLogout: () => ipcRenderer.invoke('gh:logout'),
   openAuth: (uri) => ipcRenderer.invoke('gh:openAuth', uri),
   comment: (url, text) => ipcRenderer.invoke('thread:comment', { url, text }),
+  createIssue: (title, body) => ipcRenderer.invoke('issue:create', { title, body }),
 
   evolutionGet: () => ipcRenderer.invoke('evolution:get'),
   evolutionRun: () => ipcRenderer.invoke('evolution:run'),

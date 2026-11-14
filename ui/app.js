@@ -320,11 +320,14 @@ function renderConvoEmpty() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.2c0 4-3.8 7.2-8.5 7.2-1 0-2-.14-2.9-.4L4 20.5l1.5-4.1C4.3 15.2 3.5 13.8 3.5 12.2c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2Z"/></svg>
       </div>
       <b>已接入，还没有会话</b>
-      <span>在仓库议题里 @ 它派活，或回复已有议题；值守收到消息后，会话会出现在这里。</span>
+      <span>点「＋ 新任务」直接派活，或在仓库议题里 @ 它；值守收到消息后，会话会出现在这里。</span>
+      <button class="btn sm" id="btn-empty-new-issue">＋ 新任务</button>
       <button class="btn ghost sm" id="btn-open-repo-issues">去仓库开议题</button>
     </div>`;
     const b = $('btn-open-repo-issues');
     if (b) b.onclick = () => host.openExternal(`https://github.com/${repo}/issues/new`);
+    const nb = $('btn-empty-new-issue');
+    if (nb) nb.onclick = openIssueModal;
   } else {
     body.innerHTML = `<div class="empty">
       <div class="empty-art">
@@ -490,6 +493,34 @@ async function openTicket(id) {
   } catch (e) {
     $('ticket-detail').innerHTML = `<div class="empty sm"><span>${esc(e.message)}</span></div>`;
   }
+}
+
+/* ───────────────────────── 新任务（会话页直接派活） ───────────────────────── */
+
+function openIssueModal() {
+  if (!state || !state.config || !state.config.repository) { toast('先在接入页选一个仓库'); return setPage('connect'); }
+  const poster = (gh && gh.posterLogin) || '';
+  const agent = (gh && (gh.agentLogin || gh.login)) || '';
+  $('issue-as').textContent = poster ? `以 @${poster} 派活给 @${agent}` : '需要发单人登录';
+  $('issue-modal').hidden = false;
+  $('issue-title').focus();
+}
+
+async function submitIssue() {
+  const title = $('issue-title').value.trim();
+  const body = $('issue-body').value.trim();
+  if (!title && !body) return toast('写点要求再派活');
+  $('btn-issue-submit').disabled = true;
+  try {
+    const r = await host.createIssue(title, body);
+    if (!r.ok) throw new Error(r.error || '开议题失败');
+    $('issue-modal').hidden = true;
+    $('issue-title').value = '';
+    $('issue-body').value = '';
+    toast(`已派活：议题 #${r.number}，值守最多 60s 内接收`);
+    setTimeout(() => refreshThreads(), 3000);
+  } catch (e) { toast(e.message); }
+  finally { $('btn-issue-submit').disabled = false; }
 }
 
 /* ───────────────────────── 进化 ───────────────────────── */
@@ -852,6 +883,11 @@ document.addEventListener('click', async (e) => {
   }
   if (id === 'btn-evo-refresh') return refreshEvolution();
   if (id === 'btn-evo-dir') return host.evolutionOpenDir();
+
+  // 新任务
+  if (id === 'btn-new-issue') return openIssueModal();
+  if (id === 'btn-issue-cancel') { $('issue-modal').hidden = true; return; }
+  if (id === 'btn-issue-submit') return submitIssue();
 
   // GitHub
   if (id === 'btn-install-gh') {

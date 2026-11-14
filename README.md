@@ -14,7 +14,7 @@
 | 页 | 做什么 |
 | --- | --- |
 | **概览** | 值守一句话状态、执行器负载、组件健康矩阵、最近决策、最近工单 |
-| **会话** | 人 ↔ agent 的同一个入口：读取 bundle 的 thread / timeline，输入框直接回到议题里 |
+| **会话** | 人 ↔ agent 的同一个入口：读取 bundle 的 thread / timeline，输入框直接回到议题里；「＋ 新任务」以发单人身份开议题 @ agent，不用离开指挥台 |
 | **工单** | 每个工单的阶段、执行器数量、工作目录、产出摘要，可重试 / 停止 |
 | **进化** | 自我进化闭环：运行经验 → 失败分析 → 改进提案 → 验证应用 → 试用裁决（保留/回滚），详见 [docs/self-evolution.md](docs/self-evolution.md) |
 | **接入** | GitHub 五步向导：gh → 账号 → 仓库 → 授权人 → 自检 |
@@ -50,6 +50,15 @@ GitHub 议题 @agent ──→ github-watch ──→ Policy 授权 ──→ Ti
 令牌用 Electron `safeStorage`（Windows DPAPI）加密后存在 `%APPDATA%\superagent-win\auth.json`。
 宿主自己的 GitHub 操作（读账号、列仓库、回帖）都走 REST，不依赖 gh 二进制；
 gh 只在 bundle 拉取议题 / 执行器干活时需要。
+
+### 双身份：发单人 + agent
+
+bundle 只认「人」的消息，且忽略 agent 自己发的议题/评论，所以宿主存两个身份：
+
+- **agent**（如 `wtnagent001`）：`agent-auth.json` + `gh-config/hosts.yml`，bundle 以它干活、开 PR；
+- **发单人**（授权人名单里的账号，如 `wangtangning`）：`auth.json`，会话页「＋ 新任务」和回帖以它发出。
+
+接入页登录时按授权人名单自动分流角色；两个身份互不覆盖。
 
 ### gh 二进制
 

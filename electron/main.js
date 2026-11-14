@@ -566,26 +566,71 @@ function withTimeout(promise, ms) {
 
 let authToken = '';
 const AUTH_FILE = () => path.join(app.getPath('userData'), 'auth.json');
+// 发单人（人）与 agent 双身份：auth.json 存发单人，agent-auth.json 存 agent。
+// bundle 的 gh 用 agent-auth；宿主回帖/开议题用发单人 token（bundle 只认人的消息）。
+const AGENT_AUTH_FILE = () => path.join(app.getPath('userData'), 'agent-auth.json');
+let posterToken = '';
+let posterLogin = '';
+let agentToken = '';
+let agentLogin = '';
 
 function saveAuth(login, token) {
   authToken = token || '';
   try {
-    const payload = safeStorage.isEncryptionAvailable()
-      ? 'enc:' + safeStorage.encryptString(token).toString('base64')
-      : 'plain:' + Buffer.from(token, 'utf8').toString('base64');
-    fs.writeFileSync(AUTH_FILE(), JSON.stringify({ login, token: payload, at: Date.now() }), 'utf8');
+    fs.writeFileSync(AUTH_FILE(), JSON.stringify({ login, token: encryptPayload(token), at: Date.now() }), 'utf8');
   } catch (e) { log('保存登录信息失败：' + e.message, 'error'); }
+}
+
+function decryptToken(payload) {
+  return String(payload || '').startsWith('enc:')
+    ? safeStorage.decryptString(Buffer.from(String(payload).slice(4), 'base64'))
+    : Buffer.from(String(payload || '').replace(/^plain:/, ''), 'base64').toString('utf8');
 }
 
 function loadAuth() {
   try {
     const j = JSON.parse(fs.readFileSync(AUTH_FILE(), 'utf8'));
-    const token = String(j.token || '').startsWith('enc:')
-      ? safeStorage.decryptString(Buffer.from(String(j.token).slice(4), 'base64'))
-      : Buffer.from(String(j.token || '').replace(/^plain:/, ''), 'base64').toString('utf8');
-    authToken = token;
-    return { login: j.login || '', token };
-  } catch { return null; }
+    posterToken = decryptToken(j.token);
+    posterLogin = j.login || '';
+    authToken = posterToken;
+  } catch { posterToken = ''; posterLogin = ''; authToken = ''; }
+  try {
+    const a = JSON.parse(fs.readFileSync(AGENT_AUTH_FILE(), 'utf8'));
+    agentToken = decryptToken(a.token);
+    agentLogin = a.login || '';
+  } catch { agentToken = ''; agentLogin = ''; }
+  // 旧版本单身份遗留：auth.json 里若是 agent，归位到 agent 槽，发单人待登录
+  const inAllowed = (l) => (config.allowed || []).some((x) => String(x).toLowerCase() === String(l).toLowerCase());
+  if (posterLogin && !inAllowed(posterLogin) && agentLogin && posterLogin.toLowerCase() === agentLogin.toLowerCase()) {
+    posterLogin = ''; posterToken = ''; authToken = '';
+  }
+  return posterLogin ? { login: posterLogin, token: posterToken } : null;
+}
+
+/** 把 agent 身份写进 bundle 用的 gh-config（不动发单人 auth）。 */
+function writeAgentToGhConfig() {
+  if (!agentLogin || !agentToken) return false;
+  writeHostsYml(agentLogin, agentToken);
+  return true;
+}
+
+/** 登录成功后的角色分流：授权人=发单人，其余=agent。 */
+function assignAuthRole(login, token) {
+  const isPoster = (config.allowed || []).some((a) => String(a).toLowerCase() === String(login).toLowerCase());
+  if (isPoster) {
+    posterLogin = login; posterToken = token; authToken = token;
+    saveAuth(login, token);
+  } else {
+    agentLogin = login; agentToken = token;
+    try { fs.writeFileSync(AGENT_AUTH_FILE(), JSON.stringify({ login, token: encryptPayload(token), at: Date.now() }), 'utf8'); } catch (e) { log('保存 agent 登录失败：' + e.message, 'error'); }
+  }
+  if (agentLogin && agentToken) writeAgentToGhConfig();
+}
+
+function encryptPayload(token) {
+  return safeStorage.isEncryptionAvailable()
+    ? 'enc:' + safeStorage.encryptString(token).toString('base64')
+    : 'plain:' + Buffer.from(token, 'utf8').toString('base64');
 }
 
 function clearAuth() {
@@ -615,6 +660,8 @@ function ghSnapshot() {
     path: findGh() || '',
     configDir: config.ghConfigDir,
     login: gh.auth.login,
+    agentLogin,
+    posterLogin,
     install: { ...gh.install },
     auth: { ...gh.auth }
   };
@@ -845,8 +892,7 @@ function pollDevice(deviceCode, interval) {
           headers: { authorization: `Bearer ${data.access_token}`, accept: 'application/vnd.github+json' }
         }).catch(() => ({}));
         const login = user.login || 'github-user';
-        writeHostsYml(login, data.access_token);
-        saveAuth(login, data.access_token);
+        assignAuthRole(login, data.access_token);
         gh.auth.pending = false;
         gh.auth.login = login;
         gh.auth.userCode = '';
@@ -878,8 +924,7 @@ async function loginWithToken(token) {
       headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' }
     });
     if (!user || !user.login) throw new Error('token 无效');
-    writeHostsYml(user.login, token);
-    saveAuth(user.login, token);
+    assignAuthRole(user.login, token);
     gh.auth.login = user.login;
     emitGh();
     await ghIdentity();
@@ -910,11 +955,40 @@ async function listRepos() {
 }
 
 async function logoutGithub() {
+  // 只清 agent 身份；发单人 token 保留（开议题/回帖还要用）
+  agentLogin = ''; agentToken = '';
+  try { fs.rmSync(AGENT_AUTH_FILE(), { force: true }); } catch {}
   try { fs.rmSync(path.join(config.ghConfigDir, 'hosts.yml'), { force: true }); } catch {}
-  clearAuth();
   gh.auth.login = '';
   emitGh();
   return { ok: true };
+}
+
+/** 在会话页直接派活：以发单人身份开议题并 @ agent。 */
+async function createIssue(title, body) {
+  const repo = String(config.repository || '').trim();
+  if (!repo) return { ok: false, error: '先在接入页选一个仓库' };
+  if (!posterToken) return { ok: false, error: '需要发单人登录：接入页用授权人账号（如 wangtangning）登录一次' };
+  const agent = agentLogin || gh.auth.login || '';
+  const text = `@${agent} ${String(body || '').trim()}`.trim();
+  try {
+    const res = await net.fetch(`https://api.github.com/repos/${repo}/issues`, {
+      method: 'POST',
+      headers: {
+        'User-Agent': 'SuperAgent',
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${posterToken}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ title: String(title || '').trim() || '新任务', body: text })
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: `GitHub ${res.status}: ${j.message || ''}`.slice(0, 300) };
+    log(`已以 @${posterLogin} 开议题 ${repo}#${j.number} 派活给 @${agent}`);
+    return { ok: true, url: j.html_url, number: j.number };
+  } catch (e) {
+    return { ok: false, error: e.message.slice(0, 300) };
+  }
 }
 
 /** 在会话的 GitHub 议题/PR 下替人发一条评论：窗口里的输入框就是回复入口。 */
@@ -1083,6 +1157,7 @@ ipcMain.handle('gh:repos', () => listRepos());
 ipcMain.handle('gh:logout', () => logoutGithub());
 ipcMain.handle('gh:openAuth', (_e, uri) => shell.openExternal(uri));
 ipcMain.handle('thread:comment', (_e, { url, text }) => postComment(url, text));
+ipcMain.handle('issue:create', (_e, { title, body }) => createIssue(title, body));
 
 /* 自我进化：全部走引擎，UI 只读快照 / 触发动作 */
 ipcMain.handle('evolution:get', () => ensureEvolution().snapshot());

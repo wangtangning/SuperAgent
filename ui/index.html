@@ -136,6 +136,7 @@
             <aside class="thread-list">
               <div class="tl-head">
                 <input id="thread-search" placeholder="搜索会话、议题、人…" />
+                <button class="btn sm" id="btn-new-issue">＋ 新任务</button>
                 <div class="seg" id="thread-filter">
                   <button class="on" data-f="subscribed">活跃</button>
                   <button data-f="recent">最近</button>
@@ -377,6 +378,23 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="modal" id="issue-modal" hidden>
+    <div class="modal-card">
+      <div class="card-head"><span>新任务</span><em id="issue-as"></em></div>
+      <div class="form">
+        <label>标题</label>
+        <input id="issue-title" placeholder="一句话说明要做什么" />
+        <label>要求（会自动 @ agent）</label>
+        <textarea id="issue-body" rows="4" placeholder="例如：把 README 里的 xx 错别字改成 yy"></textarea>
+        <div class="row">
+          <button class="btn" id="btn-issue-submit">派活</button>
+          <button class="btn ghost" id="btn-issue-cancel">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
