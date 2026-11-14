@@ -1,0 +1,48 @@
+'use strict';
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('host', {
+  get: () => ipcRenderer.invoke('host:get'),
+  start: () => ipcRenderer.invoke('host:start'),
+  stop: () => ipcRenderer.invoke('host:stop'),
+  restart: () => ipcRenderer.invoke('host:restart'),
+  refresh: () => ipcRenderer.invoke('host:refresh'),
+  api: (path) => ipcRenderer.invoke('host:api', { path }),
+  post: (path, body) => ipcRenderer.invoke('host:post', { path, body }),
+  saveSetup: (payload) => ipcRenderer.invoke('host:saveSetup', payload),
+  setupCheck: () => ipcRenderer.invoke('host:setupCheck'),
+  pause: (paused) => ipcRenderer.invoke('host:pause', paused),
+  openLog: () => ipcRenderer.invoke('host:openLog'),
+  openProfile: () => ipcRenderer.invoke('host:openProfile'),
+  openState: () => ipcRenderer.invoke('host:openState'),
+  openBundle: () => ipcRenderer.invoke('host:openBundle'),
+  openExternal: (u) => ipcRenderer.invoke('host:openExternal', u),
+  pickDir: () => ipcRenderer.invoke('host:pickDir'),
+  rememberRepo: (repository) => ipcRenderer.invoke('host:rememberRepo', repository),
+
+  ghStatus: () => ipcRenderer.invoke('gh:status'),
+  ghInstall: () => ipcRenderer.invoke('gh:install'),
+  ghPick: () => ipcRenderer.invoke('gh:pick'),
+  ghLoginStart: () => ipcRenderer.invoke('gh:loginStart'),
+  ghLoginCancel: () => ipcRenderer.invoke('gh:loginCancel'),
+  ghTokenLogin: (token) => ipcRenderer.invoke('gh:tokenLogin', token),
+  ghRepos: () => ipcRenderer.invoke('gh:repos'),
+  ghLogout: () => ipcRenderer.invoke('gh:logout'),
+  openAuth: (uri) => ipcRenderer.invoke('gh:openAuth', uri),
+  comment: (url, text) => ipcRenderer.invoke('thread:comment', { url, text }),
+
+  evolutionGet: () => ipcRenderer.invoke('evolution:get'),
+  evolutionRun: () => ipcRenderer.invoke('evolution:run'),
+  evolutionApply: (id) => ipcRenderer.invoke('evolution:apply', id),
+  evolutionReject: (id, reason) => ipcRenderer.invoke('evolution:reject', { id, reason }),
+  evolutionRollback: (id, reason) => ipcRenderer.invoke('evolution:rollback', { id, reason }),
+  evolutionEvaluate: (id) => ipcRenderer.invoke('evolution:evaluate', id),
+  evolutionSettings: (patch) => ipcRenderer.invoke('evolution:settings', patch),
+  evolutionOpenDir: () => ipcRenderer.invoke('evolution:openDir'),
+  onEvolution: (cb) => { ipcRenderer.on('evolution:update', (_e, s) => cb(s)); },
+
+  onState: (cb) => { ipcRenderer.on('host:state', (_e, s) => cb(s)); },
+  onLog: (cb) => { ipcRenderer.on('host:log', (_e, l) => cb(l)); },
+  onUrl: (cb) => { ipcRenderer.on('host:url', (_e, u) => cb(u)); },
+  onGh: (cb) => { ipcRenderer.on('gh:update', (_e, s) => cb(s)); }
+});

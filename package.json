@@ -1,0 +1,57 @@
+{
+  "name": "superagent-win",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SuperAgent for Windows — a desktop host for DeepSeek Harness running the dsh-superagent bundle",
+  "main": "electron/main.js",
+  "author": "Tnn",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "icon": "node scripts/make-icon.js",
+    "dist": "electron-builder --win portable --x64",
+    "dist:nsis": "electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "com.tnn.superagent.win",
+    "productName": "SuperAgent",
+    "asar": true,
+    "compression": "store",
+    "files": [
+      "electron/**/*",
+      "ui/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bundle",
+        "to": "bundle"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "SuperAgent",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh": "^0.2.2-rc.1",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  }
+}

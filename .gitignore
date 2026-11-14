@@ -1,0 +1,5 @@
+node_modules/
+dist/
+bundle/dsh-superagent/node_modules/
+*.log
+.tmp/

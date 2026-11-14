@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10141d"/>
+      <stop offset="1" stop-color="#07080c"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#60a5fa"/>
+    </linearGradient>
+    <linearGradient id="tick" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#a7f3eb"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.32" cy="0.26" r="0.9">
+      <stop offset="0" stop-color="#5eead4" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#60a5fa" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 底：深色圆角方 -->
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#bg)"/>
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#glow)"/>
+  <rect x="40" y="40" width="944" height="944" rx="216" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
+
+  <!-- 进化环：270° 圆弧，缺口留在右上象限（-80° → 190°，顺时针） -->
+  <path d="M 565.8 206.7 A 310 310 0 1 1 206.7 458.2"
+        fill="none" stroke="url(#ring)" stroke-width="86" stroke-linecap="round"/>
+
+  <!-- 环的箭头：在弧的终点沿切线方向（右上）推进 -->
+  <path d="M 223.2 363.6 L 268.8 469.1 L 144.6 447.3 Z" fill="url(#ring)"/>
+
+  <!-- 环心对勾：一次被验证的改进 -->
+  <path d="M 383 529 L 489 634 L 668 420"
+        fill="none" stroke="url(#tick)" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

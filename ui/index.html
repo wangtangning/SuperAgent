@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SuperAgent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- ─────────────── 左侧导航 ─────────────── -->
+    <aside class="rail">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13.3 4.6A7.6 7.6 0 1 1 4.6 10.7" />
+            <path d="M5.2 7.2 4.4 11l3.7-.7" />
+            <path d="m8.7 12.4 2.4 2.4 4.4-5.2" />
+          </svg>
+        </div>
+        <div class="brand-txt">
+          <b>SuperAgent</b>
+          <span>指挥台</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item active" data-page="overview">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg>
+          <span>概览</span>
+        </button>
+        <button class="nav-item" data-page="threads">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.2c0 4-3.8 7.2-8.5 7.2-1 0-2-.14-2.9-.4L4 20.5l1.5-4.1C4.3 15.2 3.5 13.8 3.5 12.2c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2Z"/></svg>
+          <span>会话</span>
+        </button>
+        <button class="nav-item" data-page="tickets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5V6.2c0-.7.6-1.2 1.2-1.2h13.6c.7 0 1.2.5 1.2 1.2v2.3a2.2 2.2 0 0 0 0 4.4v2.3c0 .7-.5 1.2-1.2 1.2H5.2c-.66 0-1.2-.5-1.2-1.2v-2.3a2.2 2.2 0 0 0 0-4.4Z"/><path d="M12 7.5v9" stroke-dasharray="2 2.5"/></svg>
+          <span>工单</span>
+        </button>
+        <button class="nav-item" data-page="evolution">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5c-4.7 0-8.5-3.8-8.5-8.5S7.3 3.5 12 3.5c3.4 0 6.3 2 7.7 4.8"/><path d="M20.5 3.5v5h-5"/><path d="M8.5 12.5l2.4 2.4 4.6-4.9"/></svg>
+          <span>进化</span>
+        </button>
+        <button class="nav-item" data-page="connect">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 14.5 9.5"/><path d="M8.2 11.8 6.4 13.6a3.4 3.4 0 0 0 4.8 4.8l1.8-1.8"/><path d="M15.8 12.2l1.8-1.8a3.4 3.4 0 0 0-4.8-4.8l-1.8 1.8"/></svg>
+          <span>接入</span>
+        </button>
+        <button class="nav-item" data-page="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.1"/><circle cx="10" cy="17" r="2.1"/></svg>
+          <span>设置</span>
+        </button>
+        <button class="nav-item" data-page="engine">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="m8 10 2.2 2.2L8 14.4M12.6 14.6h3.4"/></svg>
+          <span>引擎</span>
+        </button>
+      </nav>
+
+      <div class="rail-foot">
+        <div class="run-card" id="rail-run">
+          <div class="run-top"><span class="dot" id="rail-dot"></span><b id="rail-phase">未启动</b></div>
+          <div class="run-sub" id="rail-sub">dsh · superagent</div>
+        </div>
+        <button class="rail-btn" id="btn-run">启动值守</button>
+      </div>
+    </aside>
+
+    <!-- ─────────────── 主区域 ─────────────── -->
+    <main class="stage">
+      <header class="topbar">
+        <div class="tb-left">
+          <h1 id="page-title">概览</h1>
+          <span class="tb-sub" id="page-sub"></span>
+        </div>
+        <div class="tb-right">
+          <button class="chip clickable" id="chip-repo" title="在接入页修改仓库">未连接仓库</button>
+          <span class="chip live" id="chip-live"><i></i><span>未启动</span></span>
+          <div class="tb-actions">
+            <button class="icon-btn" id="btn-pause" title="暂停 / 恢复处理"></button>
+            <button class="icon-btn" id="btn-restart" title="重启引擎"></button>
+            <button class="icon-btn" id="btn-log" title="打开宿主日志"></button>
+          </div>
+        </div>
+      </header>
+
+      <div class="scroll" id="scroll">
+        <!-- 概览 -->
+        <section class="page active" data-page="overview">
+          <div class="banner" id="setup-banner" hidden>
+            <div class="banner-icon">!</div>
+            <div class="banner-body">
+              <b id="banner-title">还差一步</b>
+              <span id="banner-detail"></span>
+            </div>
+            <button class="btn ghost sm" id="banner-go">去接入</button>
+          </div>
+
+          <div class="hero">
+            <div class="hero-main">
+              <div class="kicker">值守单元</div>
+              <div class="hero-title" id="hero-title">正在准备…</div>
+              <p class="hero-sub" id="hero-sub">宿主会准备 profile、装载 dsh-superagent bundle，然后拉起 dsh。</p>
+              <div class="hero-actions">
+                <button class="btn" id="hero-primary">打开会话</button>
+                <button class="btn ghost" id="hero-ghost">刷新状态</button>
+              </div>
+            </div>
+            <div class="hero-side">
+              <div class="hero-fig"><span class="fig-v" id="fig-run">0/3</span><span class="fig-k">执行器</span></div>
+              <div class="hero-fig"><span class="fig-v" id="fig-queue">0</span><span class="fig-k">待处理</span></div>
+              <div class="hero-fig"><span class="fig-v" id="fig-health">—</span><span class="fig-k">组件健康</span></div>
+            </div>
+          </div>
+
+          <div class="stat-row" id="flow-row"></div>
+
+          <div class="cols">
+            <div class="card">
+              <div class="card-head"><span>组件健康</span><em id="health-at"></em></div>
+              <div class="health" id="health"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><span>最近决策</span><em>Policy</em></div>
+              <div class="decisions" id="decisions"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span>工单</span><button class="link" id="go-tickets">全部 →</button></div>
+            <div class="tickets-mini" id="tickets-mini"></div>
+          </div>
+        </section>
+
+        <!-- 会话 -->
+        <section class="page page-chat" data-page="threads">
+          <div class="chat">
+            <aside class="thread-list">
+              <div class="tl-head">
+                <input id="thread-search" placeholder="搜索会话、议题、人…" />
+                <div class="seg" id="thread-filter">
+                  <button class="on" data-f="subscribed">活跃</button>
+                  <button data-f="recent">最近</button>
+                  <button data-f="all">全部</button>
+                </div>
+              </div>
+              <div class="tl-items" id="thread-items"></div>
+            </aside>
+            <div class="convo">
+              <header class="convo-head" id="convo-head">
+                <div class="convo-empty-head">选择一个会话</div>
+              </header>
+              <div class="convo-body" id="convo-body">
+                <div class="empty">
+                  <div class="empty-art">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.2c0 4-3.8 7.2-8.5 7.2-1 0-2-.14-2.9-.4L4 20.5l1.5-4.1C4.3 15.2 3.5 13.8 3.5 12.2c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2Z"/></svg>
+                  </div>
+                  <b>还没有会话</b>
+                  <span>接入 GitHub 之后，你在议题里 @ 它、它在这里回你——同一个入口。</span>
+                  <button class="btn ghost sm" data-goto="connect">去接入 GitHub</button>
+                </div>
+              </div>
+              <footer class="composer" id="composer">
+                <textarea id="composer-input" rows="1" placeholder="回复这个会话…（Enter 发送，Shift+Enter 换行）"></textarea>
+                <button class="send" id="btn-send" title="发送">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12 20 5l-6.2 15-2.4-6.1L4.5 12Z"/></svg>
+                </button>
+              </footer>
+            </div>
+          </div>
+        </section>
+
+        <!-- 工单 -->
+        <section class="page" data-page="tickets">
+          <div class="toolbar">
+            <div class="seg" id="ticket-filter">
+              <button class="on" data-f="open">进行中</button>
+              <button data-f="ended">已结束</button>
+              <button data-f="all">全部</button>
+            </div>
+            <button class="btn ghost sm" id="btn-ticket-refresh">刷新</button>
+          </div>
+          <div class="cols two">
+            <div class="card list-card">
+              <div class="card-head"><span>工单列表</span><em id="ticket-count"></em></div>
+              <div class="ticket-list" id="ticket-list"></div>
+            </div>
+            <div class="card detail-card" id="ticket-detail">
+              <div class="empty sm"><b>未选择工单</b><span>左侧点一个工单看它的阶段、执行器与产出。</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 进化 -->
+        <section class="page" data-page="evolution">
+          <div class="evo-hero card">
+            <div class="evo-hero-main">
+              <div class="kicker">自我进化闭环</div>
+              <div class="evo-flow">
+                <span>采集经验</span><i>→</i><span>分析失败</span><i>→</i><span>生成提案</span><i>→</i><span>验证应用</span><i>→</i><span>试用裁决</span><i>→</i><span class="evo-loop">保留 / 回滚</span>
+              </div>
+              <p class="evo-sub" id="evo-sub">从真实工单结果里学习：失败聚类变成提示词教训与技能，改进经 bundle 原生版本化落地，用后续工单的成功率裁决去留。</p>
+              <div class="hero-actions">
+                <button class="btn" id="btn-evo-run">立即进化一轮</button>
+                <button class="btn ghost" id="btn-evo-refresh">刷新</button>
+                <button class="btn ghost" id="btn-evo-dir">打开数据目录</button>
+              </div>
+            </div>
+            <div class="evo-hero-side">
+              <label class="evo-switch"><input type="checkbox" id="evo-enabled" /><span>启用进化</span></label>
+              <label class="evo-switch"><input type="checkbox" id="evo-autoapply" /><span>自动应用安全提案</span></label>
+              <div class="evo-last" id="evo-last">—</div>
+            </div>
+          </div>
+
+          <div class="stat-row" id="evo-stats"></div>
+
+          <div class="cols two">
+            <div class="card">
+              <div class="card-head"><span>成功率走势</span><em id="evo-chart-note">每轮采集一个点</em></div>
+              <div class="evo-chart" id="evo-chart"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><span>进化日志</span><em>evolution.log</em></div>
+              <pre class="logs evo-log" id="evo-log"></pre>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span>改进提案</span><em id="evo-proposal-count"></em></div>
+            <div class="evo-proposals" id="evo-proposals"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span>运行经验</span><em id="evo-exp-count"></em></div>
+            <div class="evo-exp" id="evo-exp"></div>
+          </div>
+        </section>
+
+        <!-- 接入 -->
+        <section class="page" data-page="connect">
+          <div class="steps" id="connect-steps">
+            <!-- step 1 : gh CLI -->
+            <div class="step" data-step="cli">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <div class="step-title">准备 GitHub 命令行</div>
+                <div class="step-desc">bundle 用 gh 读写议题。宿主会自己找，找不到就帮你装一份。</div>
+                <div class="step-state" id="cli-state">检测中…</div>
+                <div class="step-state bad" id="cli-error" hidden></div>
+                <div class="step-actions">
+                  <button class="btn" id="btn-install-gh" hidden>下载并安装 gh</button>
+                  <button class="btn ghost" id="btn-pick-gh">选择已有的 gh.exe</button>
+                  <span class="progress" id="gh-progress" hidden><i id="gh-progress-bar"></i><span id="gh-progress-text"></span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- step 2 : login -->
+            <div class="step" data-step="login">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <div class="step-title">在浏览器里登录 GitHub</div>
+                <div class="step-desc">点一下，浏览器会打开授权页；输入下面的一次性代码即可，不需要在终端里粘贴 token。</div>
+                <div class="step-state" id="login-state">未登录</div>
+                <div class="device" id="device" hidden>
+                  <span class="device-code" id="device-code">XXXX-XXXX</span>
+                  <button class="btn ghost sm" id="btn-copy-code">复制代码</button>
+                  <button class="btn sm" id="btn-open-auth">在浏览器打开</button>
+                </div>
+                <div class="step-actions">
+                  <button class="btn" id="btn-login">连接 GitHub</button>
+                  <button class="btn ghost" id="btn-cancel-login" hidden>取消</button>
+                  <button class="btn ghost" id="btn-token-toggle">改用令牌</button>
+                  <button class="btn ghost" id="btn-logout" hidden>退出登录</button>
+                </div>
+                <div class="token-row" id="token-row" hidden>
+                  <input id="token-input" placeholder="粘贴 personal access token（repo 权限）" />
+                  <button class="btn sm" id="btn-token-save">保存</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- step 3 : repo -->
+            <div class="step" data-step="repo">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <div class="step-title">选一个仓库当作业面</div>
+                <div class="step-desc">值守只在这个仓库里读写议题与 PR。</div>
+                <div class="step-state" id="repo-state">未选择</div>
+                <div class="repo-pick">
+                  <input id="repo-input" placeholder="owner/name" />
+                  <button class="btn ghost sm" id="btn-list-repos">列出我的仓库</button>
+                </div>
+                <div class="repo-list" id="repo-list" hidden></div>
+              </div>
+            </div>
+
+            <!-- step 4 : people -->
+            <div class="step" data-step="people">
+              <div class="step-num">4</div>
+              <div class="step-body">
+                <div class="step-title">谁能给你派活</div>
+                <div class="step-desc">只认这些人发的指令；留空等于谁都不能派活。</div>
+                <div class="step-state" id="people-state">—</div>
+                <div class="repo-pick">
+                  <input id="allowed-input" placeholder="GitHub 登录名，逗号分隔" />
+                </div>
+              </div>
+            </div>
+
+            <!-- step 5 : apply -->
+            <div class="step" data-step="apply">
+              <div class="step-num">5</div>
+              <div class="step-body">
+                <div class="step-title">保存并自检</div>
+                <div class="step-desc">写入 Source → Policy → Execution 三块配置，然后让 bundle 重新检查。</div>
+                <div class="step-state" id="apply-state">待保存</div>
+                <div class="step-actions">
+                  <button class="btn" id="btn-apply">保存并自检</button>
+                  <button class="btn ghost" id="btn-recheck">重新检查</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 设置 -->
+        <section class="page" data-page="settings">
+          <div class="cols two even">
+            <div class="card">
+              <div class="card-head"><span>执行</span><em>Executor</em></div>
+              <div class="form">
+                <label>Ticket 工作目录</label>
+                <div class="row">
+                  <input id="f-dir" placeholder="留空 = &lt;stateDir&gt;/work" />
+                  <button class="btn ghost sm" id="btn-pick-dir">选择…</button>
+                </div>
+                <label>prepare 命令</label>
+                <textarea id="f-prepare" rows="3" placeholder="可选：为每个 Ticket 建 worktree 的命令"></textarea>
+                <div class="row">
+                  <button class="btn sm" id="btn-save-exec">保存</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>宿主</span><em>Host</em></div>
+              <div class="kv"><span>端口</span><b id="s-port">3082</b></div>
+              <div class="kv"><span>DSH_HOME</span><b class="mono ell" id="s-home">—</b></div>
+              <div class="kv"><span>profile</span><b class="mono ell" id="s-profile">—</b></div>
+              <div class="kv"><span>bundle</span><b id="s-bundle">—</b></div>
+              <div class="kv"><span>gh</span><b class="mono ell" id="s-gh">—</b></div>
+              <div class="actions">
+                <button class="btn ghost sm" id="btn-open-profile">profile</button>
+                <button class="btn ghost sm" id="btn-open-state">state</button>
+                <button class="btn ghost sm" id="btn-open-log2">日志</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span>宿主日志</span><em>最近 200 行 · 自动滚动</em></div>
+            <pre class="logs" id="logs"></pre>
+          </div>
+        </section>
+
+        <!-- 引擎 -->
+        <section class="page page-engine" data-page="engine">
+          <webview id="dsh" partition="persist:dsh" allowpopups></webview>
+          <div class="engine-empty" id="dsh-empty">
+            <b>引擎未启动</b>
+            <span>DSH 原生界面会在这里加载；日常用前面的会话 / 工单就够了。</span>
+            <button class="btn" id="btn-start-engine">启动引擎</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
