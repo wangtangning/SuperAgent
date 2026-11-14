@@ -589,7 +589,9 @@ async function sshAction(act, id) {
     if (act === 'copy') { await navigator.clipboard.writeText(key.publicKey); toast('公钥已复制'); return; }
     if (act === 'register') {
       const r = await host.sshRegisterGithub(id);
-      toast(r.ok ? '公钥已登记到 agent 的 GitHub' : r.error);
+      if (r.ok) toast('公钥已登记到 agent 的 GitHub');
+      else if (/404|403/.test(r.error || '')) toast('agent 登录授权不含管理公钥权限：请复制公钥，到 agent 账号 Settings → SSH keys 手动添加');
+      else toast(r.error);
       return;
     }
     if (act === 'remove') { await host.sshRemove(id); toast('已删除'); }

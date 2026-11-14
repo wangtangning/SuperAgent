@@ -468,6 +468,7 @@
             <div class="card-head"><span>SSH 密钥库</span><em>DPAPI 加密 · 仅本机</em></div>
             <div class="guide-body">
               <p>存 agent 要用的 SSH 私钥（私有 git 主机、部署服务器）。<b>分配给 agent</b> 后，执行器的 git/ssh 自动带上这把密钥；不碰你自己的 <code>~/.ssh</code>。公钥可以贴到 GitHub / GitLab / 服务器的 authorized_keys。</p>
+              <p class="why">「登记到 agent GitHub」需要 agent 登录时授权管理公钥；若提示无权限，用「复制公钥」到 agent 账号 Settings → SSH and GPG keys 手动添加，效果相同。</p>
             </div>
             <div class="step-actions">
               <input id="ssh-name" placeholder="密钥名字，如 deploy-prod" style="max-width:220px" />
