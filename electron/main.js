@@ -371,16 +371,24 @@ async function ensureBundle() {
     log(errorText, 'error');
     return false;
   }
-  // 跨盘 link 时 pnpm 的相对 symlink 会算错层级：复制到 profile 同盘同层，直接 copy 安装（不用 link）
-  let installDir = BUNDLE_DIR;
+  // dsh 对本地路径一律 link，而 pnpm 跨盘 symlink 层级有 bug：
+  // 手动把 bundle copy 进 profile/node_modules，依赖写 file: 协议，再让 dsh reconcile
   try {
     const staged = path.join(DSH_HOME, 'bundles', 'dsh-superagent');
     fs.mkdirSync(path.dirname(staged), { recursive: true });
     fs.cpSync(BUNDLE_DIR, staged, { recursive: true });
-    installDir = staged;
-  } catch (e) { log('复制 bundle 到 DSH_HOME 失败，改用原路径：' + e.message, 'warn'); }
+    const nm = path.join(PROFILE_DIR, 'node_modules', 'dsh-superagent');
+    fs.rmSync(nm, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(nm), { recursive: true });
+    fs.cpSync(staged, nm, { recursive: true });
+    const pkgFile = path.join(PROFILE_DIR, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+    pkg.dependencies = pkg.dependencies || {};
+    pkg.dependencies['dsh-superagent'] = 'file:' + staged.replace(/\\/g, '/');
+    fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2), 'utf8');
+  } catch (e) { log('预置 bundle 失败：' + e.message, 'error'); }
   log('安装 dsh-superagent bundle 到 superagent profile…');
-  const r = await runDsh(['plugin', '--profile', PROFILE, 'add', installDir], { timeoutMs: 300000 });
+  const r = await runDsh(['plugin', '--profile', PROFILE, 'add', 'file:' + path.join(DSH_HOME, 'bundles', 'dsh-superagent').replace(/\\/g, '/')], { timeoutMs: 300000 });
   if (r.code !== 0 || !bundleInstalled()) {
     errorText = '安装 dsh-superagent bundle 失败（日志里有 pnpm 的原始输出）。';
     log(errorText, 'error');
