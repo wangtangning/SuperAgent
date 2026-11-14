@@ -273,11 +273,14 @@ function findFile(dir, name) {
 
 function dshEnv(r) {
   const env = Object.assign({}, process.env, { DSH_HOME: r.home, NO_COLOR: '1' });
-  // 新 home 没有模型凭据时，从默认 home 复制一份（不覆盖已有的）
+  // 新 home 的凭据缺少模型 key 时，从默认 home 同步（dsh 会自建占位文件，不能只判存在）
   try {
     const dst = path.join(r.home, '.credentials.yaml');
     const src = path.join(os.homedir(), '.dsh', '.credentials.yaml');
-    if (!fs.existsSync(dst) && fs.existsSync(src)) { fs.mkdirSync(r.home, { recursive: true }); fs.copyFileSync(src, dst); }
+    if (fs.existsSync(src)) {
+      const cur = fs.existsSync(dst) ? fs.readFileSync(dst, 'utf8') : '';
+      if (!cur.includes('DEEPSEEK_API_KEY')) { fs.mkdirSync(r.home, { recursive: true }); fs.copyFileSync(src, dst); }
+    }
   } catch {}
   if (r.config.ghConfigDir) env.GH_CONFIG_DIR = r.config.ghConfigDir;
   if (r.sshVault) Object.assign(env, r.sshVault.env(r.p.id));
