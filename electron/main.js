@@ -385,6 +385,9 @@ async function ensureBundle() {
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
     pkg.dependencies = pkg.dependencies || {};
     pkg.dependencies['dsh-superagent'] = 'file:' + staged.replace(/\\/g, '/');
+    const bundles = (pkg.dsh && pkg.dsh.profile && pkg.dsh.profile.bundles) || [];
+    if (!bundles.includes('dsh-superagent')) bundles.push('dsh-superagent');
+    pkg.dsh = pkg.dsh || {}; pkg.dsh.profile = pkg.dsh.profile || {}; pkg.dsh.profile.bundles = bundles;
     fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2), 'utf8');
   } catch (e) { log('预置 bundle 失败：' + e.message, 'error'); }
   log('安装 dsh-superagent bundle 到 superagent profile…');
