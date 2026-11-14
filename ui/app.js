@@ -660,7 +660,10 @@ async function srvAction(act, id) {
 /* ───────────────────────── 分配给项目（服务器/密钥共用） ───────────────────────── */
 
 let assignCtx = null;
-function openAssignModal(kind, id) {
+async function openAssignModal(kind, id) {
+  if (kind === 'server') servers = await host.serversList();
+  else ssh = await host.sshList();
+  if (!projectsData) projectsData = await host.projectsList();
   const list = kind === 'server' ? (servers && servers.servers) : (ssh && ssh.keys);
   const item = (list || []).find((x) => x.id === id);
   if (!item || !projectsData) return;
