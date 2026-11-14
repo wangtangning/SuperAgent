@@ -246,7 +246,7 @@ function renderHost(s) {
 
   renderGitHub(ghInfo);
   renderLogs(s.logs || []);
-  if (s.projects) renderProjects({ activeId: s.project && s.project.id, projects: s.projects.map((p) => ({ ...p, running: p.id === (s.project && s.project.id) && s.phase === 'running' })) });
+  if (s.projects) renderProjects({ activeId: s.project && s.project.id, projects: s.projects });
 
   if (running) {
     if (page === 'overview') refreshOverview();
