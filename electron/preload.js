@@ -41,7 +41,9 @@ contextBridge.exposeInMainWorld('host', {
   sshImport: (name, privateKey) => ipcRenderer.invoke('ssh:import', { name, privateKey }),
   sshRemove: (id) => ipcRenderer.invoke('ssh:remove', id),
   sshAssign: (id) => ipcRenderer.invoke('ssh:assign', id),
-  sshUnassign: () => ipcRenderer.invoke('ssh:unassign'),
+  sshUnassign: (id) => ipcRenderer.invoke('ssh:unassign', id),
+  sshAssignTo: (id, projectId) => ipcRenderer.invoke('ssh:assignTo', { id, projectId }),
+  sshUnassignFrom: (id, projectId) => ipcRenderer.invoke('ssh:unassignFrom', { id, projectId }),
   sshTest: (target) => ipcRenderer.invoke('ssh:test', target),
   sshRegisterGithub: (id) => ipcRenderer.invoke('ssh:registerGithub', id),
 
@@ -51,6 +53,8 @@ contextBridge.exposeInMainWorld('host', {
   serversTest: (id) => ipcRenderer.invoke('servers:test', id),
   serversAssign: (id) => ipcRenderer.invoke('servers:assign', id),
   serversUnassign: (id) => ipcRenderer.invoke('servers:unassign', id),
+  serversAssignTo: (id, projectId) => ipcRenderer.invoke('servers:assignTo', { id, projectId }),
+  serversUnassignFrom: (id, projectId) => ipcRenderer.invoke('servers:unassignFrom', { id, projectId }),
   onServers: (cb) => { ipcRenderer.on('servers:update', (_e, s) => cb(s)); },
 
   reviewGet: () => ipcRenderer.invoke('review:get'),

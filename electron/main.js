@@ -1077,6 +1077,20 @@ ipcMain.handle('ssh:import', (_e, { name, privateKey }) => ensureSsh(rt()).impor
 ipcMain.handle('ssh:remove', (_e, id) => ensureSsh(rt()).remove(String(id)));
 ipcMain.handle('ssh:assign', async (_e, id) => { const r = rt(); const res = await ensureSsh(r).assign(String(id), r.p.id); if (r.phase === 'running') { log(r, '[ssh] 重启引擎以注入 GIT_SSH_COMMAND…'); await stop(r); await start(r); } return res; });
 ipcMain.handle('ssh:unassign', async (_e, id) => { const r = rt(); const res = ensureSsh(r).unassign(r.p.id, String(id)); if (r.phase === 'running') { await stop(r); await start(r); } return res; });
+ipcMain.handle('ssh:assignTo', async (_e, { id, projectId }) => {
+  const p = projects.projects.find((x) => x.id === projectId);
+  if (!p) return { ok: false, error: '项目不存在' };
+  let r = getRt(p.id); if (!r) r = makeRuntime(p);
+  const res = await ensureSsh(r).assign(String(id), p.id);
+  if (r.phase === 'running') { await stop(r); await start(r); }
+  return res;
+});
+ipcMain.handle('ssh:unassignFrom', async (_e, { id, projectId }) => {
+  const r = getRt(projectId); if (!r) return { ok: false, error: '项目不存在' };
+  const res = ensureSsh(r).unassign(projectId, String(id));
+  if (r.phase === 'running') { await stop(r); await start(r); }
+  return res;
+});
 ipcMain.handle('ssh:test', (_e, target) => ensureSsh(rt()).test(target, rt().p.id));
 ipcMain.handle('ssh:registerGithub', async (_e, id) => {
   const r = rt();
@@ -1102,6 +1116,22 @@ ipcMain.handle('servers:remove', (_e, id) => ensureServers(rt()).remove(String(i
 ipcMain.handle('servers:test', (_e, id) => ensureServers(rt()).test(String(id)));
 ipcMain.handle('servers:assign', async (_e, id) => { const r = rt(); const res = ensureServers(r).assign(String(id), r.p.id); await syncServerSkill(r); if (r.phase === 'running') { log(r, '[lan] 重启引擎以注入 lan 助手…'); await stop(r); await start(r); } return res; });
 ipcMain.handle('servers:unassign', async (_e, id) => { const r = rt(); const res = ensureServers(r).unassign(String(id), r.p.id); await syncServerSkill(r); if (r.phase === 'running') { await stop(r); await start(r); } return res; });
+ipcMain.handle('servers:assignTo', async (_e, { id, projectId }) => {
+  const p = projects.projects.find((x) => x.id === projectId);
+  if (!p) return { ok: false, error: '项目不存在' };
+  let r = getRt(p.id); if (!r) r = makeRuntime(p);
+  const res = ensureServers(r).assign(String(id), p.id);
+  await syncServerSkill(r);
+  if (r.phase === 'running') { log(r, '[lan] 重启引擎以注入 lan 助手…'); await stop(r); await start(r); }
+  return res;
+});
+ipcMain.handle('servers:unassignFrom', async (_e, { id, projectId }) => {
+  const r = getRt(projectId); if (!r) return { ok: false, error: '项目不存在' };
+  const res = ensureServers(r).unassign(String(id), projectId);
+  await syncServerSkill(r);
+  if (r.phase === 'running') { await stop(r); await start(r); }
+  return res;
+});
 
 ipcMain.handle('review:get', () => { const a = ensureReview(rt()); const s = a.settings(); return { ...s, usingEngineKey: !s.llm && !!a.effectiveLlm() }; });
 ipcMain.handle('review:settings', (_e, patch) => ensureReview(rt()).saveSettings(patch || {}));

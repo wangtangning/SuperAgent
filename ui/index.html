@@ -584,6 +584,18 @@
     </main>
   </div>
 
+  <div class="modal" id="assign-modal" hidden>
+    <div class="modal-card">
+      <div class="card-head"><span>分配给项目</span><em id="assign-item-name"></em></div>
+      <div class="guide-body"><p>勾选的项目，其 agent 才能用这台服务器/这把密钥；未勾选的项目看不到它。</p></div>
+      <div class="assign-list" id="assign-list"></div>
+      <div class="row">
+        <button class="btn" id="btn-assign-save">保存分配</button>
+        <button class="btn ghost" id="btn-assign-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="project-modal" hidden>
     <div class="modal-card">
       <div class="card-head"><span>添加项目</span><em>本地文件夹 → 可选 GitHub</em></div>

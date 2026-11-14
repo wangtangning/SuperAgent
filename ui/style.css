@@ -963,3 +963,9 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 .proj-sub { font-size: 11px; color: var(--tx-3); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-foot { display: flex; align-items: center; gap: 7px; margin-top: 9px; font-size: 11.5px; color: var(--tx-2); }
 .proj-foot .btn { margin-left: auto; }
+
+/* 分配弹窗 */
+.assign-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.assign-row { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.assign-row span { display: flex; flex-direction: column; }
+.assign-sub { font-style: normal; font-size: 10.5px; color: var(--tx-3); }

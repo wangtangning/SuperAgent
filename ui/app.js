@@ -634,9 +634,7 @@ function renderServers(s) {
       ${v.note ? `<div class="evo-p-why">${esc(v.note)}</div>` : ''}
       <div class="pa-btns">
         <button class="btn ghost sm" data-srv-act="test" data-srv-id="${esc(v.id)}">测试连接</button>
-        ${on
-          ? '<button class="btn ghost sm" data-srv-act="unassign" data-srv-id="' + esc(v.id) + '">取消分配</button>'
-          : '<button class="btn sm" data-srv-act="assign" data-srv-id="' + esc(v.id) + '">分配给 agent</button>'}
+        <button class="btn sm" data-srv-act="assign" data-srv-id="${esc(v.id)}">分配给项目…</button>
         <button class="btn ghost sm danger" data-srv-act="remove" data-srv-id="${esc(v.id)}">删除</button>
       </div>
       <pre class="logs ssh-test-out" id="srv-out-${esc(v.id)}" hidden></pre>
@@ -653,11 +651,47 @@ async function srvAction(act, id) {
       out.textContent = (r.ok ? '✓ 连接成功\n' : '✗ ') + r.output;
       return;
     }
-    if (act === 'assign') { toast('分配中，引擎重启注入 lan 助手…'); await host.serversAssign(id); toast('已分配：agent 可用 lan 命令登录'); }
-    if (act === 'unassign') { await host.serversUnassign(id); toast('已取消分配'); }
+    if (act === 'assign') { openAssignModal('server', id); return; }
     if (act === 'remove') { await host.serversRemove(id); toast('已删除'); }
     refreshServers();
   } catch (e) { toast(e.message); }
+}
+
+/* ───────────────────────── 分配给项目（服务器/密钥共用） ───────────────────────── */
+
+let assignCtx = null;
+function openAssignModal(kind, id) {
+  const list = kind === 'server' ? (servers && servers.servers) : (ssh && ssh.keys);
+  const item = (list || []).find((x) => x.id === id);
+  if (!item || !projectsData) return;
+  assignCtx = { kind, id };
+  $('assign-item-name').textContent = item.name;
+  const byProj = (kind === 'server' ? servers.assignedByProject : ssh.assignedByProject) || {};
+  $('assign-list').innerHTML = projectsData.projects.map((p) => `
+    <label class="evo-switch assign-row">
+      <input type="checkbox" data-assign-proj="${esc(p.id)}" ${(byProj[p.id] || []).includes(id) ? 'checked' : ''} />
+      <span>${esc(p.name)}<i class="assign-sub">${esc(p.repo || '本地项目')}</i></span>
+    </label>`).join('');
+  $('assign-modal').hidden = false;
+}
+async function saveAssign() {
+  if (!assignCtx) return;
+  const { kind, id } = assignCtx;
+  const byProj = (kind === 'server' ? servers.assignedByProject : ssh.assignedByProject) || {};
+  const checked = [...document.querySelectorAll('#assign-list input:checked')].map((i) => i.dataset.assignProj);
+  $('btn-assign-save').disabled = true;
+  try {
+    for (const p of projectsData.projects) {
+      const was = (byProj[p.id] || []).includes(id);
+      const now = checked.includes(p.id);
+      if (now && !was) await (kind === 'server' ? host.serversAssignTo(id, p.id) : host.sshAssignTo(id, p.id));
+      if (!now && was) await (kind === 'server' ? host.serversUnassignFrom(id, p.id) : host.sshUnassignFrom(id, p.id));
+    }
+    $('assign-modal').hidden = true;
+    toast('分配已保存');
+    if (kind === 'server') refreshServers(); else refreshSsh();
+  } catch (e) { toast(e.message); }
+  finally { $('btn-assign-save').disabled = false; }
 }
 
 /* ───────────────────────── SSH 密钥库 ───────────────────────── */
@@ -690,9 +724,7 @@ function renderSsh(s) {
       <div class="pa-btns">
         <button class="btn ghost sm" data-ssh-act="copy" data-ssh-id="${esc(k.id)}">复制公钥</button>
         <button class="btn ghost sm" data-ssh-act="register" data-ssh-id="${esc(k.id)}">登记到 agent GitHub</button>
-        ${on
-          ? '<button class="btn ghost sm" data-ssh-act="unassign" data-ssh-id="' + esc(k.id) + '">取消分配</button>'
-          : '<button class="btn sm" data-ssh-act="assign" data-ssh-id="' + esc(k.id) + '">分配给 agent</button>'}
+        <button class="btn sm" data-ssh-act="assign" data-ssh-id="${esc(k.id)}">分配给项目…</button>
         <button class="btn ghost sm danger" data-ssh-act="remove" data-ssh-id="${esc(k.id)}">删除</button>
       </div>
     </div>`;
@@ -711,8 +743,7 @@ async function sshAction(act, id) {
       return;
     }
     if (act === 'remove') { await host.sshRemove(id); toast('已删除'); }
-    if (act === 'assign') { toast('分配中，引擎会重启以注入密钥…'); await host.sshAssign(id); toast('已分配给 agent'); }
-    if (act === 'unassign') { await host.sshUnassign(); toast('已取消分配'); }
+    if (act === 'assign') { openAssignModal('ssh', id); return; }
     refreshSsh();
   } catch (e) { toast(e.message); }
 }
@@ -1183,6 +1214,10 @@ document.addEventListener('click', async (e) => {
     const repo = (state && state.config && state.config.repository) || '';
     return host.openExternal(`https://github.com/${repo}/invitations`);
   }
+
+  // 分配弹窗
+  if (id === 'btn-assign-cancel') { $('assign-modal').hidden = true; return; }
+  if (id === 'btn-assign-save') return saveAssign();
 
   // 服务器
   if (id === 'btn-srv-add') {

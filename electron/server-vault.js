@@ -50,6 +50,7 @@ class ServerVault {
     const assigned = projectId ? (d.assignedByProject || {})[projectId] || [] : [...new Set(Object.values(d.assignedByProject || {}).flat())];
     return {
       assignedIds: assigned,
+      assignedByProject: d.assignedByProject || {},
       servers: (d.servers || []).map((s) => ({
         id: s.id, name: s.name, host: s.host, port: s.port, username: s.username,
         auth: s.auth, note: s.note || '', createdAt: s.createdAt

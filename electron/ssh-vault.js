@@ -72,6 +72,7 @@ class SshVault {
     const ids = projectId ? (d.assignedByProject || {})[projectId] || [] : [...new Set(Object.values(d.assignedByProject || {}).flat())];
     return {
       assignedIds: ids,
+      assignedByProject: d.assignedByProject || {},
       keys: (d.keys || []).map((k) => ({ id: k.id, name: k.name, publicKey: k.publicKey, fingerprint: k.fingerprint, createdAt: k.createdAt, comment: k.comment || '' }))
     };
   }
