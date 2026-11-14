@@ -142,6 +142,7 @@ function renderProjects(d) {
       <div class="proj-foot">
         <span class="dot ${p.running ? 'ok' : ''}"></span><span>${p.running ? '引擎运行中' : '未运行'}</span>
         ${p.id !== d.activeId ? '<button class="btn ghost sm" data-proj-switch="' + esc(p.id) + '">切换</button>' : ''}
+        ${!p.running ? '<button class="btn ghost sm" data-proj-start="' + esc(p.id) + '">启动</button>' : ''}
       </div>
     </div>`).join('');
 }
@@ -1035,6 +1036,12 @@ document.addEventListener('click', async (e) => {
 
   const projSwitch = e.target.closest('[data-proj-switch]');
   if (projSwitch) return doSwitchProject(projSwitch.dataset.projSwitch);
+  const projStart = e.target.closest('[data-proj-start]');
+  if (projStart) {
+    toast('启动项目引擎…');
+    try { await host.projectsStart(projStart.dataset.projStart); await refreshProjects(); renderHost(await host.get()); } catch (err) { toast(err.message); }
+    return;
+  }
   const projCard = e.target.closest('.proj-card');
   if (projCard && projCard.dataset.proj !== (projectsData && projectsData.activeId)) return doSwitchProject(projCard.dataset.proj);
 

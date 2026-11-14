@@ -274,8 +274,8 @@ function findFile(dir, name) {
 function dshEnv(r) {
   const env = Object.assign({}, process.env, { DSH_HOME: r.home, NO_COLOR: '1' });
   if (r.config.ghConfigDir) env.GH_CONFIG_DIR = r.config.ghConfigDir;
-  if (r.sshVault) Object.assign(env, r.sshVault.env());
-  if (r.serverVault) Object.assign(env, r.serverVault.env(path.join(r.userData, 'lan', 'bin')));
+  if (r.sshVault) Object.assign(env, r.sshVault.env(r.p.id));
+  if (r.serverVault) Object.assign(env, r.serverVault.env(path.join(SHARED_DIR, 'lan', 'bin'), r.p.id));
   return env;
 }
 function runDsh(r, args, { timeoutMs = 180000 } = {}) {
@@ -530,7 +530,7 @@ async function applySetup(r, payload = {}) {
     results.push({ step: 'policy', ...(await apiPut(r, 'settings/policy', value, block.revision)) });
     r.config.allowed = allowed.map((a) => a.id);
   }
-  if (r.serverVault && r.serverVault.list().assignedIds.length) {
+  if (r.serverVault && r.serverVault.list(r.p.id).assignedIds.length) {
     const block = (await apiGet(r, 'settings')).blocks.policy;
     const value = JSON.parse(JSON.stringify(block.value || {}));
     value.rules = value.rules || [];
@@ -866,7 +866,7 @@ function stopLoops(r) {
 function ensureSsh(r) {
   if (r.sshVault) return r.sshVault;
   r.sshVault = new SshVault({
-    dir: path.join(r.userData, 'ssh'),
+    dir: path.join(SHARED_DIR, 'ssh'),
     encrypt: (t) => encryptPayload(t), decrypt: (p) => decryptToken(p),
     log: (l) => log(r, '[ssh] ' + l),
     onChange: () => { if (win && !win.isDestroyed() && r === rt()) win.webContents.send('ssh:update', r.sshVault.list()); }
@@ -876,7 +876,7 @@ function ensureSsh(r) {
 function ensureServers(r) {
   if (r.serverVault) return r.serverVault;
   r.serverVault = new ServerVault({
-    dir: path.join(r.userData, 'lan'),
+    dir: path.join(SHARED_DIR, 'lan'),
     encrypt: (t) => encryptPayload(t), decrypt: (p) => decryptToken(p),
     log: (l) => log(r, '[lan] ' + l),
     onChange: () => { if (win && !win.isDestroyed() && r === rt()) win.webContents.send('servers:update', r.serverVault.list()); }
@@ -884,7 +884,7 @@ function ensureServers(r) {
   return r.serverVault;
 }
 function ensureLanHelper(r) {
-  const dir = path.join(r.userData, 'lan', 'bin');
+  const dir = path.join(SHARED_DIR, 'lan', 'bin');
   fs.mkdirSync(dir, { recursive: true });
   const src = app.isPackaged ? path.join(process.resourcesPath, 'scripts', 'lan-helper.js') : path.join(__dirname, '..', 'scripts', 'lan-helper.js');
   fs.copyFileSync(src, path.join(dir, 'lan-helper.js'));
@@ -897,7 +897,7 @@ async function syncServerSkill(r) {
   try {
     const view = await apiGet(r, 'prompts');
     const cfg = JSON.parse(JSON.stringify(view.current.config));
-    const text = r.serverVault.skillText();
+    const text = r.serverVault.skillText(r.p.id);
     cfg.skills = cfg.skills || {};
     if (text) cfg.skills['lan-servers'] = text; else delete cfg.skills['lan-servers'];
     if (JSON.stringify(cfg) !== JSON.stringify(view.current.config)) {
@@ -1051,13 +1051,13 @@ ipcMain.handle('collab:status', () => collabStatus(rt()));
 ipcMain.handle('collab:invite', () => collabInvite(rt()));
 ipcMain.handle('issues:resync', () => resyncIssues(rt()));
 
-ipcMain.handle('ssh:list', () => ensureSsh(rt()).list());
+ipcMain.handle('ssh:list', () => ensureSsh(rt()).list(rt().p.id));
 ipcMain.handle('ssh:generate', (_e, name) => ensureSsh(rt()).generate(name));
 ipcMain.handle('ssh:import', (_e, { name, privateKey }) => ensureSsh(rt()).importKey(name, privateKey));
 ipcMain.handle('ssh:remove', (_e, id) => ensureSsh(rt()).remove(String(id)));
-ipcMain.handle('ssh:assign', async (_e, id) => { const r = rt(); const res = ensureSsh(r).assign(String(id)); if (r.phase === 'running') { log(r, '[ssh] 重启引擎以注入 GIT_SSH_COMMAND…'); await stop(r); await start(r); } return res; });
-ipcMain.handle('ssh:unassign', async () => { const r = rt(); const res = ensureSsh(r).unassign(); if (r.phase === 'running') { await stop(r); await start(r); } return res; });
-ipcMain.handle('ssh:test', (_e, target) => ensureSsh(rt()).test(target));
+ipcMain.handle('ssh:assign', async (_e, id) => { const r = rt(); const res = await ensureSsh(r).assign(String(id), r.p.id); if (r.phase === 'running') { log(r, '[ssh] 重启引擎以注入 GIT_SSH_COMMAND…'); await stop(r); await start(r); } return res; });
+ipcMain.handle('ssh:unassign', async (_e, id) => { const r = rt(); const res = ensureSsh(r).unassign(r.p.id, String(id)); if (r.phase === 'running') { await stop(r); await start(r); } return res; });
+ipcMain.handle('ssh:test', (_e, target) => ensureSsh(rt()).test(target, rt().p.id));
 ipcMain.handle('ssh:registerGithub', async (_e, id) => {
   const r = rt();
   const key = ensureSsh(r).list().keys.find((k) => k.id === id);
@@ -1076,12 +1076,12 @@ ipcMain.handle('ssh:registerGithub', async (_e, id) => {
   } catch (e) { return { ok: false, error: e.message.slice(0, 200) }; }
 });
 
-ipcMain.handle('servers:list', () => ensureServers(rt()).list());
+ipcMain.handle('servers:list', () => ensureServers(rt()).list(rt().p.id));
 ipcMain.handle('servers:add', (_e, p) => ensureServers(rt()).add(p || {}));
 ipcMain.handle('servers:remove', (_e, id) => ensureServers(rt()).remove(String(id)));
 ipcMain.handle('servers:test', (_e, id) => ensureServers(rt()).test(String(id)));
-ipcMain.handle('servers:assign', async (_e, id) => { const r = rt(); const res = ensureServers(r).assign(String(id)); await syncServerSkill(r); if (r.phase === 'running') { log(r, '[lan] 重启引擎以注入 lan 助手…'); await stop(r); await start(r); } return res; });
-ipcMain.handle('servers:unassign', async (_e, id) => { const r = rt(); const res = ensureServers(r).unassign(String(id)); await syncServerSkill(r); if (r.phase === 'running') { await stop(r); await start(r); } return res; });
+ipcMain.handle('servers:assign', async (_e, id) => { const r = rt(); const res = ensureServers(r).assign(String(id), r.p.id); await syncServerSkill(r); if (r.phase === 'running') { log(r, '[lan] 重启引擎以注入 lan 助手…'); await stop(r); await start(r); } return res; });
+ipcMain.handle('servers:unassign', async (_e, id) => { const r = rt(); const res = ensureServers(r).unassign(String(id), r.p.id); await syncServerSkill(r); if (r.phase === 'running') { await stop(r); await start(r); } return res; });
 
 ipcMain.handle('review:get', () => { const a = ensureReview(rt()); const s = a.settings(); return { ...s, usingEngineKey: !s.llm && !!a.effectiveLlm() }; });
 ipcMain.handle('review:settings', (_e, patch) => ensureReview(rt()).saveSettings(patch || {}));
@@ -1089,6 +1089,15 @@ ipcMain.handle('review:run', () => ensureReview(rt()).tick());
 
 ipcMain.handle('projects:list', () => ({ activeId: projects.activeId, projects: projects.projects.map((p) => { const x = getRt(p.id); return { ...p, running: !!(x && x.phase === 'running') }; }) }));
 ipcMain.handle('projects:switch', (_e, id) => switchProject(String(id)));
+ipcMain.handle('projects:start', async (_e, id) => {
+  const p = projects.projects.find((x) => x.id === id);
+  if (!p) return { ok: false, error: '项目不存在' };
+  let r = getRt(p.id);
+  if (!r) r = makeRuntime(p);
+  const res = await start(r);
+  emit();
+  return res;
+});
 ipcMain.handle('projects:add', (_e, p) => addProject(p || {}));
 ipcMain.handle('projects:pickFolder', async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 ipcMain.handle('projects:update', (_e, { id, patch }) => {

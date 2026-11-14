@@ -29,7 +29,15 @@ class ServerVault {
   }
 
   _load() {
-    try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return { servers: [], assignedIds: [] }; }
+    try {
+      const d = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      if (!d.assignedByProject) {
+        d.assignedByProject = {};
+        if ((d.assignedIds || []).length) d.assignedByProject['p-default'] = d.assignedIds;
+        delete d.assignedIds;
+      }
+      return d;
+    } catch { return { servers: [], assignedByProject: {} }; }
   }
   _save(d) {
     const tmp = this.file + '.tmp';
@@ -37,10 +45,11 @@ class ServerVault {
     fs.renameSync(tmp, this.file);
   }
 
-  list() {
+  list(projectId) {
     const d = this._load();
+    const assigned = projectId ? (d.assignedByProject || {})[projectId] || [] : [...new Set(Object.values(d.assignedByProject || {}).flat())];
     return {
-      assignedIds: d.assignedIds || [],
+      assignedIds: assigned,
       servers: (d.servers || []).map((s) => ({
         id: s.id, name: s.name, host: s.host, port: s.port, username: s.username,
         auth: s.auth, note: s.note || '', createdAt: s.createdAt
@@ -77,7 +86,7 @@ class ServerVault {
     const s = d.servers.find((x) => x.id === id);
     if (!s) throw new Error('服务器不存在');
     d.servers = d.servers.filter((x) => x.id !== id);
-    d.assignedIds = (d.assignedIds || []).filter((x) => x !== id);
+    for (const k of Object.keys(d.assignedByProject || {})) d.assignedByProject[k] = (d.assignedByProject[k] || []).filter((x) => x !== id);
     this._save(d);
     this.syncAssigned();
     this.log(`服务器已删除：${s.name}`);
@@ -85,40 +94,45 @@ class ServerVault {
     return { ok: true };
   }
 
-  assign(id) {
+  assign(id, projectId) {
     const d = this._load();
     if (!d.servers.some((x) => x.id === id)) throw new Error('服务器不存在');
-    d.assignedIds = [...new Set([...(d.assignedIds || []), id])];
+    d.assignedByProject = d.assignedByProject || {};
+    const cur = d.assignedByProject[projectId] || [];
+    d.assignedByProject[projectId] = [...new Set([...cur, id])];
     this._save(d);
     this.syncAssigned();
-    this.log(`服务器已分配给 agent：${d.servers.find((x) => x.id === id).name}`);
+    this.log(`服务器已分配给项目 ${projectId}：${d.servers.find((x) => x.id === id).name}`);
     this.onChange();
     return { ok: true };
   }
 
-  unassign(id) {
+  unassign(id, projectId) {
     const d = this._load();
-    d.assignedIds = (d.assignedIds || []).filter((x) => x !== id);
+    d.assignedByProject = d.assignedByProject || {};
+    d.assignedByProject[projectId] = (d.assignedByProject[projectId] || []).filter((x) => x !== id);
     this._save(d);
     this.syncAssigned();
     this.onChange();
     return { ok: true };
   }
 
-  /** 把分配中的服务器凭据解密写成助手可读文件（仅当前用户 ACL）。 */
+  /** 所有项目分配到的服务器凭据 → 各自助手可读文件（仅当前用户 ACL）。 */
   syncAssigned() {
     const d = this._load();
-    const assigned = (d.assignedIds || []).map((id) => d.servers.find((s) => s.id === id)).filter(Boolean);
-    if (!assigned.length) {
-      try { fs.rmSync(this.credentialsFile, { force: true }); } catch {}
-      return;
+    const byProject = d.assignedByProject || {};
+    for (const [proj, ids] of Object.entries(byProject)) {
+      const file = path.join(this.dir, `credentials-${proj}.json`);
+      if (!ids.length) { try { fs.rmSync(file, { force: true }); } catch {} continue; }
+      const servers = ids.map((id) => d.servers.find((s) => s.id === id)).filter(Boolean).map((s) => {
+        const secret = JSON.parse(this.decrypt(s.secret));
+        return { id: s.id, name: s.name, host: s.host, port: s.port, username: s.username, password: secret.password, privateKey: secret.privateKey };
+      });
+      fs.writeFileSync(file, JSON.stringify(servers, null, 2), { mode: 0o600 });
+      this._restrictAclSync(file);
     }
-    const out = assigned.map((s) => {
-      const secret = JSON.parse(this.decrypt(s.secret));
-      return { id: s.id, name: s.name, host: s.host, port: s.port, username: s.username, password: secret.password, privateKey: secret.privateKey };
-    });
-    fs.writeFileSync(this.credentialsFile, JSON.stringify(out, null, 2), { mode: 0o600 });
-    this._restrictAclSync(this.credentialsFile);
+    const all = [...new Set(Object.values(byProject).flat())];
+    if (!all.length) { try { fs.rmSync(this.credentialsFile, { force: true }); } catch {} }
   }
 
   _restrictAclSync(file) {
@@ -132,20 +146,24 @@ class ServerVault {
     });
   }
 
-  /** 注入 dsh 子进程：助手上 PATH + 凭据文件位置。 */
-  env(helperDir) {
+  /** 注入 dsh 子进程：助手上 PATH + 该项目凭据文件位置。 */
+  env(helperDir, projectId) {
     const d = this._load();
-    if (!(d.assignedIds || []).length) return {};
+    const ids = ((d.assignedByProject || {})[projectId] || []);
+    if (!ids.length) return {};
+    const credFile = path.join(this.dir, `credentials-${projectId}.json`);
+    if (!fs.existsSync(credFile)) this.syncAssigned();
     return {
-      SUPERAGENT_LAN_CREDENTIALS: this.credentialsFile,
+      SUPERAGENT_LAN_CREDENTIALS: credFile,
       PATH: helperDir + path.delimiter + (process.env.PATH || '')
     };
   }
 
-  /** agent 技能文本：只有清单，没有密码。 */
-  skillText() {
+  /** agent 技能文本：只有该项目分配到的清单，没有密码。 */
+  skillText(projectId) {
     const d = this._load();
-    const assigned = (d.assignedIds || []).map((id) => d.servers.find((s) => s.id === id)).filter(Boolean);
+    const ids = ((d.assignedByProject || {})[projectId] || []);
+    const assigned = ids.map((id) => d.servers.find((s) => s.id === id)).filter(Boolean);
     if (!assigned.length) return '';
     const lines = assigned.map((s) => `- ${s.name} (id ${s.id}): ${s.username}@${s.host}:${s.port}${s.note ? ' — ' + s.note : ''}`);
     return [

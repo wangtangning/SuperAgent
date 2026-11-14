@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('host', {
 
   projectsList: () => ipcRenderer.invoke('projects:list'),
   projectsSwitch: (id) => ipcRenderer.invoke('projects:switch', id),
+  projectsStart: (id) => ipcRenderer.invoke('projects:start', id),
   projectsAdd: (p) => ipcRenderer.invoke('projects:add', p),
   projectsPickFolder: () => ipcRenderer.invoke('projects:pickFolder'),
   projectsUpdate: (id, patch) => ipcRenderer.invoke('projects:update', { id, patch }),

@@ -26,24 +26,24 @@ test('生成 → 入库 → 公钥/指纹可读，私钥加密落盘', async (t)
   const raw = fs.readFileSync(path.join(v.dir, 'keys.json'), 'utf8');
   assert.ok(!raw.includes('PRIVATE KEY'), '私钥明文不得落盘');
   assert.ok(raw.includes('b64:'));
-  const list = v.list();
+  const list = v.list('proj-a');
   assert.equal(list.keys.length, 1);
-  assert.equal(list.assignedId, '');
+  assert.equal(list.assignedIds.length, 0);
 });
 
 test('分配 → env 注入 GIT_SSH_COMMAND；取消 → 清空', async (t) => {
   const v = tmpVault(t);
   const k = await v.generate('assign-me');
-  assert.deepEqual(v.env(), {});
-  await v.assign(k.id);
-  const env = v.env();
+  assert.deepEqual(v.env('proj-a'), {});
+  await v.assign(k.id, 'proj-a');
+  const env = v.env('proj-a');
   assert.ok(env.GIT_SSH_COMMAND.includes('agent_key'));
   assert.ok(env.GIT_SSH_COMMAND.includes('IdentitiesOnly=yes'));
-  assert.ok(fs.existsSync(v.agentKeyFile));
-  assert.equal(v.list().assignedId, k.id);
-  v.unassign();
-  assert.deepEqual(v.env(), {});
-  assert.ok(!fs.existsSync(v.agentKeyFile));
+  assert.ok(fs.existsSync(require('path').join(v.dir, 'agent_key_proj-a')));
+  assert.ok(v.list('proj-a').assignedIds.includes(k.id));
+  v.unassign('proj-a', k.id);
+  assert.deepEqual(v.env('proj-a'), {});
+  assert.ok(!fs.existsSync(require('path').join(v.dir, 'agent_key_proj-a')));
 });
 
 test('导入私钥 → 导出公钥一致；坏输入拒绝', async (t) => {
@@ -58,18 +58,18 @@ test('导入私钥 → 导出公钥一致；坏输入拒绝', async (t) => {
 test('删除使用中的密钥 → 自动取消分配', async (t) => {
   const v = tmpVault(t);
   const k = await v.generate('del');
-  await v.assign(k.id);
+  await v.assign(k.id, 'proj-a');
   v.remove(k.id);
-  assert.equal(v.list().keys.length, 0);
-  assert.deepEqual(v.env(), {});
+  assert.equal(v.list('proj-a').keys.length, 0);
+  assert.deepEqual(v.env('proj-a'), {});
 });
 
 test('连接测试：未分配时拒绝；github 试连返回结果', async (t) => {
   const v = tmpVault(t);
-  await assert.rejects(() => v.test(), /先分配/);
+  await assert.rejects(() => v.test('git@github.com', 'proj-a'), /先给当前项目分配/);
   const k = await v.generate('net');
-  await v.assign(k.id);
-  const r = await v.test('git@github.com');
+  await v.assign(k.id, 'proj-a');
+  const r = await v.test('git@github.com', 'proj-a');
   // 新密钥未登记到 GitHub：应返回未通过但带 GitHub 的响应文本（证明 ssh 链路工作）
   assert.equal(typeof r.ok, 'boolean');
   assert.ok(r.output.length > 0);

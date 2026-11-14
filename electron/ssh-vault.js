@@ -51,7 +51,15 @@ class SshVault {
   }
 
   _load() {
-    try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return { keys: [], assignedId: '' }; }
+    try {
+      const d = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      if (!d.assignedByProject) {
+        d.assignedByProject = {};
+        if (d.assignedId) d.assignedByProject['p-default'] = [d.assignedId];
+        delete d.assignedId;
+      }
+      return d;
+    } catch { return { keys: [], assignedByProject: {} }; }
   }
   _save(data) {
     const tmp = this.file + '.tmp';
@@ -59,10 +67,11 @@ class SshVault {
     fs.renameSync(tmp, this.file);
   }
 
-  list() {
+  list(projectId) {
     const d = this._load();
+    const ids = projectId ? (d.assignedByProject || {})[projectId] || [] : [...new Set(Object.values(d.assignedByProject || {}).flat())];
     return {
-      assignedId: d.assignedId || '',
+      assignedIds: ids,
       keys: (d.keys || []).map((k) => ({ id: k.id, name: k.name, publicKey: k.publicKey, fingerprint: k.fingerprint, createdAt: k.createdAt, comment: k.comment || '' }))
     };
   }
@@ -122,7 +131,7 @@ class SshVault {
     const d = this._load();
     const key = d.keys.find((k) => k.id === id);
     if (!key) throw new Error('密钥不存在');
-    if (d.assignedId === id) this.unassign();
+    for (const k of Object.keys(d.assignedByProject || {})) d.assignedByProject[k] = (d.assignedByProject[k] || []).filter((x) => x !== id);
     d.keys = d.keys.filter((k) => k.id !== id);
     this._save(d);
     this.log(`SSH 密钥已删除：${key.name}`);
@@ -130,30 +139,35 @@ class SshVault {
     return { ok: true };
   }
 
-  /** 分配给 agent：解密私钥写到 agent_key，返回注入 dsh 环境用的 GIT_SSH_COMMAND。 */
-  async assign(id) {
+  /** 分配给项目：解密私钥写到该项目 agent_key，返回注入 dsh 环境用的 GIT_SSH_COMMAND。 */
+  async assign(id, projectId) {
     const d = this._load();
     const key = d.keys.find((k) => k.id === id);
     if (!key) throw new Error('密钥不存在');
     const privateKey = this.decrypt(key.secret);
-    fs.writeFileSync(this.agentKeyFile, privateKey.endsWith('\n') ? privateKey : privateKey + '\n', { mode: 0o600 });
-    await this._restrictAclSync(this.agentKeyFile);
-    d.assignedId = id;
+    const keyFile = this._keyFile(projectId);
+    fs.writeFileSync(keyFile, privateKey.endsWith('\n') ? privateKey : privateKey + '\n', { mode: 0o600 });
+    await this._restrictAclSync(keyFile);
+    d.assignedByProject = d.assignedByProject || {};
+    d.assignedByProject[projectId] = [...new Set([...(d.assignedByProject[projectId] || []), id])];
     this._save(d);
-    this.log(`SSH 密钥已分配给 agent：${key.name}`);
+    this.log(`SSH 密钥已分配给项目 ${projectId}：${key.name}`);
     this.onChange();
-    return { ok: true, env: this.env() };
+    return { ok: true, env: this.env(projectId) };
   }
 
-  unassign() {
+  unassign(projectId, id) {
     const d = this._load();
-    d.assignedId = '';
+    d.assignedByProject = d.assignedByProject || {};
+    d.assignedByProject[projectId] = (d.assignedByProject[projectId] || []).filter((x) => x !== id);
     this._save(d);
-    try { fs.rmSync(this.agentKeyFile, { force: true }); } catch {}
-    this.log('已取消 agent 的 SSH 密钥分配');
+    if (!(d.assignedByProject[projectId] || []).length) { try { fs.rmSync(this._keyFile(projectId), { force: true }); } catch {} }
+    this.log('已取消项目的 SSH 密钥分配');
     this.onChange();
     return { ok: true };
   }
+
+  _keyFile(projectId) { return projectId ? path.join(this.dir, `agent_key_${projectId}`) : this.agentKeyFile; }
 
   /** 同步收紧 ACL，返回 Promise（ssh-keygen/ssh 读私钥前必须完成）。 */
   _restrictAclSync(file) {
@@ -168,25 +182,27 @@ class SshVault {
   }
 
   /** 注入 dsh 子进程的环境；未分配返回 {}。 */
-  env() {
+  env(projectId) {
     const d = this._load();
-    if (!d.assignedId || !fs.existsSync(this.agentKeyFile)) return {};
+    const ids = (d.assignedByProject || {})[projectId] || [];
+    const keyFile = this._keyFile(projectId);
+    if (!ids.length || !fs.existsSync(keyFile)) return {};
     const ssh = findBin('ssh');
     const q = (p) => `"${p.replace(/"/g, '\\"')}"`;
     return {
-      GIT_SSH_COMMAND: `${q(ssh)} -i ${q(this.agentKeyFile)} -o IdentitiesOnly=yes -o UserKnownHostsFile=${q(this.knownHostsFile)} -o StrictHostKeyChecking=accept-new`
+      GIT_SSH_COMMAND: `${q(ssh)} -i ${q(keyFile)} -o IdentitiesOnly=yes -o UserKnownHostsFile=${q(this.knownHostsFile)} -o StrictHostKeyChecking=accept-new`
     };
   }
 
   /** 用分配的密钥试连（默认 git@github.com；GitHub 成功时 exit 1 且带 successfully authenticated）。 */
-  async test(target) {
-    const env = this.env();
-    if (!env.GIT_SSH_COMMAND) throw new Error('先分配一把密钥给 agent');
+  async test(target, projectId) {
+    const env = this.env(projectId);
+    if (!env.GIT_SSH_COMMAND) throw new Error('先给当前项目分配一把密钥');
     const dest = String(target || 'git@github.com').trim();
     if (!/^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+$/.test(dest)) throw new Error('目标格式：user@host');
     const ssh = findBin('ssh');
     const r = await run(ssh, [
-      '-i', this.agentKeyFile, '-o', 'IdentitiesOnly=yes',
+      '-i', this._keyFile(projectId), '-o', 'IdentitiesOnly=yes',
       '-o', `UserKnownHostsFile=${this.knownHostsFile}`, '-o', 'StrictHostKeyChecking=accept-new',
       '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
       '-T', dest
