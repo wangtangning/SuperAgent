@@ -634,6 +634,7 @@ function renderServers(s) {
       ${v.note ? `<div class="evo-p-why">${esc(v.note)}</div>` : ''}
       <div class="pa-btns">
         <button class="btn ghost sm" data-srv-act="test" data-srv-id="${esc(v.id)}">测试连接</button>
+        <button class="btn ghost sm" data-srv-act="edit" data-srv-id="${esc(v.id)}">改密码</button>
         <button class="btn sm" data-srv-act="assign" data-srv-id="${esc(v.id)}">分配给项目…</button>
         <button class="btn ghost sm danger" data-srv-act="remove" data-srv-id="${esc(v.id)}">删除</button>
       </div>
@@ -652,6 +653,20 @@ async function srvAction(act, id) {
       return;
     }
     if (act === 'assign') { openAssignModal('server', id); return; }
+    if (act === 'edit') {
+      const v = (servers.servers || []).find((x) => x.id === id);
+      const pass = prompt(`更新 ${v.name} 的密码（留空取消）：`);
+      if (pass === null) return;
+      if (!pass) { toast('未修改'); return; }
+      await host.serversUpdate(id, { password: pass });
+      toast('密码已更新，重新测试…');
+      const r = await host.serversTest(id);
+      const out = $('srv-out-' + id);
+      out.hidden = false;
+      out.textContent = (r.ok ? '✓ 连接成功\n' : '✗ ') + r.output;
+      refreshServers();
+      return;
+    }
     if (act === 'remove') { await host.serversRemove(id); toast('已删除'); }
     refreshServers();
   } catch (e) { toast(e.message); }

@@ -1112,6 +1112,7 @@ ipcMain.handle('ssh:registerGithub', async (_e, id) => {
 
 ipcMain.handle('servers:list', () => ensureServers(rt()).list(rt().p.id));
 ipcMain.handle('servers:add', (_e, p) => ensureServers(rt()).add(p || {}));
+ipcMain.handle('servers:update', (_e, { id, patch }) => ensureServers(rt()).update(String(id), patch || {}));
 ipcMain.handle('servers:remove', (_e, id) => ensureServers(rt()).remove(String(id)));
 ipcMain.handle('servers:test', (_e, id) => ensureServers(rt()).test(String(id)));
 ipcMain.handle('servers:assign', async (_e, id) => { const r = rt(); const res = ensureServers(r).assign(String(id), r.p.id); await syncServerSkill(r); if (r.phase === 'running') { log(r, '[lan] 重启引擎以注入 lan 助手…'); await stop(r); await start(r); } return res; });

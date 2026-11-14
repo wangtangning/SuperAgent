@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('host', {
 
   serversList: () => ipcRenderer.invoke('servers:list'),
   serversAdd: (p) => ipcRenderer.invoke('servers:add', p),
+  serversUpdate: (id, patch) => ipcRenderer.invoke('servers:update', { id, patch }),
   serversRemove: (id) => ipcRenderer.invoke('servers:remove', id),
   serversTest: (id) => ipcRenderer.invoke('servers:test', id),
   serversAssign: (id) => ipcRenderer.invoke('servers:assign', id),

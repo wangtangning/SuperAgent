@@ -183,6 +183,25 @@ class ServerVault {
     ].join('\n');
   }
 
+  /** 更新凭据（改密码/换密钥）。 */
+  update(id, { password, privateKey, username, port, note }) {
+    const d = this._load();
+    const s = d.servers.find((x) => x.id === id);
+    if (!s) throw new Error('服务器不存在');
+    if (username) s.username = String(username).trim();
+    if (port) s.port = Number(port) || s.port;
+    if (note !== undefined) s.note = String(note).slice(0, 200);
+    if (password || privateKey) {
+      s.auth = password ? 'password' : 'key';
+      s.secret = this.encrypt(JSON.stringify({ password: password || '', privateKey: privateKey || '' }));
+    }
+    this._save(d);
+    this.syncAssigned();
+    this.log(`服务器凭据已更新：${s.name}`);
+    this.onChange();
+    return { ok: true };
+  }
+
   /** 连接测试：密码/密钥认证 + 执行 echo。 */
   async test(id) {
     const d = this._load();
@@ -201,7 +220,12 @@ class ServerVault {
           stream.on('close', () => { clearTimeout(timer); conn.end(); resolve({ ok: out.includes('superagent-ok'), output: out.trim().slice(0, 300) }); });
         });
       });
-      conn.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, output: e.message.slice(0, 200) }); });
+      conn.on('error', (e) => {
+        clearTimeout(timer);
+        let msg = e.message;
+        if (/All configured authentication methods failed/i.test(msg)) msg = '服务器拒绝了登录：用户名或密码不对（服务器支持密码/密钥登录）。点「改密码」修正后重试。';
+        resolve({ ok: false, output: msg.slice(0, 200) });
+      });
       const cfg = { host: s.host, port: s.port, username: s.username, readyTimeout: 8000, tryKeyboard: true };
       if (secret.privateKey) cfg.privateKey = secret.privateKey;
       else cfg.password = secret.password;
