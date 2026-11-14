@@ -188,6 +188,7 @@ async function syncServerSkill() {
     if (text) cfg.skills['lan-servers'] = text;
     else delete cfg.skills['lan-servers'];
     if (JSON.stringify(cfg) !== JSON.stringify(view.current.config)) {
+      log(`[lan] 同步技能：baseRevision=${view.current.revision}，skills=${Object.keys(cfg.skills || {}).join(',')}`);
       await apiPut('prompts', cfg, view.current.revision);
       log('[lan] 已更新 agent 的 lan-servers 技能');
     }
@@ -470,10 +471,12 @@ async function apiGet(p) {
 }
 
 async function apiPut(p, value, revision) {
+  // prompts 端点的 body 形状是 {config, baseRevision}；settings 端点是 {value, revision}
+  const body = p === 'prompts' ? { config: value, baseRevision: revision } : { value, revision };
   const res = await fetch(`${base()}/orchestrator/api/${p}`, {
     method: 'PUT',
     headers: { 'x-orchestrator-request': '1', 'content-type': 'application/json' },
-    body: JSON.stringify({ value, revision })
+    body: JSON.stringify(body)
   });
   const text = await res.text();
   let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
@@ -1433,7 +1436,11 @@ ipcMain.handle('servers:unassign', async (_e, id) => {
 });
 
 /* 评审 agent */
-ipcMain.handle('review:get', () => ensureReview().settings());
+ipcMain.handle('review:get', () => {
+  const a = ensureReview();
+  const s = a.settings();
+  return { ...s, usingEngineKey: !s.llm && !!a.effectiveLlm() };
+});
 ipcMain.handle('review:settings', (_e, patch) => ensureReview().saveSettings(patch || {}));
 ipcMain.handle('review:run', () => ensureReview().tick());
 

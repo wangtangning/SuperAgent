@@ -477,7 +477,8 @@
               <button class="btn ghost sm" id="btn-review-run">立即评审一轮</button>
             </div>
             <div class="form" id="review-llm-form">
-              <label>可选：LLM 评审（OpenAI 兼容；不填用启发式）</label>
+              <label>LLM 评审（可选覆盖）</label>
+              <p class="why" id="review-engine-note" style="margin:0 0 8px"></p>
               <div class="srv-grid">
                 <div><label>baseUrl</label><input id="review-baseurl" placeholder="https://api.deepseek.com/v1" /></div>
                 <div><label>model</label><input id="review-model" placeholder="deepseek-chat" /></div>

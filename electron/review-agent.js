@@ -66,6 +66,7 @@ class ReviewAgent {
     this.store = deps.store;
     this.log = deps.log || (() => {});
     this.onChange = deps.onChange || (() => {});
+    this.llmOverride = deps.llm === undefined ? undefined : deps.llm;
     this._busy = false;
     this._done = new Map(); // ticketId -> verdict
   }
@@ -73,6 +74,20 @@ class ReviewAgent {
   settings() {
     const f = path.join(this.store.dir, 'review.json');
     try { return Object.assign({ enabled: true, llm: null }, JSON.parse(fs.readFileSync(f, 'utf8'))); } catch { return { enabled: true, llm: null }; }
+  }
+
+  /** 没显式配 LLM 时，复用引擎已有的 DeepSeek key（~/.dsh/.credentials.yaml refs）。 */
+  effectiveLlm() {
+    if (this.llmOverride !== undefined) return this.llmOverride;
+    const cfg = this.settings();
+    if (cfg.llm && cfg.llm.baseUrl && cfg.llm.apiKey) return cfg.llm;
+    try {
+      const os = require('os');
+      const yaml = fs.readFileSync(path.join(os.homedir(), '.dsh', '.credentials.yaml'), 'utf8');
+      const m = yaml.match(/DEEPSEEK_API_KEY:\s*(\S+)/);
+      if (m) return { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', apiKey: m[1] };
+    } catch {}
+    return null;
   }
   saveSettings(patch) {
     const f = path.join(this.store.dir, 'review.json');
@@ -120,12 +135,17 @@ class ReviewAgent {
     const diff = await this.gh.get(`repos/${repo}/pulls/${num}`, { accept: 'application/vnd.github.diff' });
     const request = (detail.mandate && (detail.mandate.scope || detail.mandate.request)) || t.title;
 
+    // 硬检查：冲突 / 敏感 / 过大 不交给 LLM 裁决
+    const hard = heuristic({ pr, diff, request });
     let verdict;
-    if (cfg.llm && cfg.llm.baseUrl && cfg.llm.apiKey) {
-      try { verdict = await llmJudge(cfg.llm, { pr, diff, request }); }
-      catch (e) { this.log(`LLM 评审失败，回退启发式：${e.message}`, 'warn'); verdict = heuristic({ pr, diff, request }); }
+    const llm = this.effectiveLlm();
+    if (hard.verdict !== 'approve') {
+      verdict = hard;
+    } else if (llm) {
+      try { verdict = await llmJudge(llm, { pr, diff, request }); }
+      catch (e) { this.log(`LLM 评审失败，回退启发式：${e.message}`, 'warn'); verdict = hard; }
     } else {
-      verdict = heuristic({ pr, diff, request });
+      verdict = hard;
     }
     this.log(`评审 PR #${num}（${t.title}）→ ${verdict.verdict}：${verdict.reason}`);
 

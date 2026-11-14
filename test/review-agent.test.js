@@ -51,7 +51,7 @@ function fakeDeps(t, { mergeable = true } = {}) {
 
 test('闭环：review 工单 → 自动合并（发单人 REST）', async (t) => {
   const { dir, calls, api, gh } = fakeDeps(t);
-  const agent = new ReviewAgent({ api, gh, store: { dir }, log: () => {} });
+  const agent = new ReviewAgent({ api, gh, store: { dir }, log: () => {}, llm: null });
   const r = await agent.tick();
   assert.equal(r.acted.length, 1);
   assert.equal(r.acted[0].verdict, 'approve');
@@ -63,7 +63,7 @@ test('闭环：review 工单 → 自动合并（发单人 REST）', async (t) =>
 
 test('闭环：冲突 → 留 REQUEST_CHANGES 评审，不合并', async (t) => {
   const { dir, calls, api, gh } = fakeDeps(t, { mergeable: false });
-  const agent = new ReviewAgent({ api, gh, store: { dir }, log: () => {} });
+  const agent = new ReviewAgent({ api, gh, store: { dir }, log: () => {}, llm: null });
   const r = await agent.tick();
   assert.equal(r.acted[0].verdict, 'request_changes');
   assert.ok(calls.some(([m, p, b]) => m === 'POST' && p.includes('/reviews') && b.event === 'REQUEST_CHANGES'));
@@ -72,7 +72,7 @@ test('闭环：冲突 → 留 REQUEST_CHANGES 评审，不合并', async (t) => 
 
 test('开关：disabled 时不评审', async (t) => {
   const { dir, api, gh } = fakeDeps(t);
-  const agent = new ReviewAgent({ api, gh, store: { dir }, log: () => {} });
+  const agent = new ReviewAgent({ api, gh, store: { dir }, log: () => {}, llm: null });
   agent.saveSettings({ enabled: false });
   const r = await agent.tick();
   assert.equal(r.skipped, 'disabled');

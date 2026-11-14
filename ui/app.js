@@ -248,7 +248,8 @@ function renderDecisions(d) {
   box.innerHTML = items.map((it) => {
     const kind = it.outcome || it.kind || '—';
     const cls = /accept/i.test(kind) ? 'accept' : /ignore/i.test(kind) ? 'ignore' : /ask|need/i.test(kind) ? 'ask' : '';
-    const reason = it.reason || it.summary || '';
+    const r = it.reason;
+    const reason = typeof r === 'string' ? r : (r && (r.text || r.code || r.message)) || it.summary || '';
     return `<div class="dec"><span class="dec-kind ${cls}">${esc(kind)}</span><div class="dec-body"><div class="dec-reason">${esc(String(reason).slice(0, 220))}</div><div class="dec-meta">${esc(String(it.triggerId || it.id || '').slice(0, 22))}${it.at ? ` · ${hhmm(it.at)}` : ''}</div></div></div>`;
   }).join('');
 }
@@ -951,6 +952,7 @@ async function loadSettingsBlock() {
   try {
     const rv = await host.reviewGet();
     $('review-enabled').checked = !!rv.enabled;
+    $('review-engine-note').textContent = rv.usingEngineKey ? '默认复用引擎的 DeepSeek 账号，无需填写' : '未检测到引擎 key：可手动填写，或用启发式评审';
     if (rv.llm) {
       $('review-baseurl').value = rv.llm.baseUrl || '';
       $('review-model').value = rv.llm.model || '';
