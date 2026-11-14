@@ -45,6 +45,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5 14.5 9.5"/><path d="M8.2 11.8 6.4 13.6a3.4 3.4 0 0 0 4.8 4.8l1.8-1.8"/><path d="M15.8 12.2l1.8-1.8a3.4 3.4 0 0 0-4.8-4.8l-1.8 1.8"/></svg>
           <span>接入</span>
         </button>
+        <button class="nav-item" data-page="guide">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5c-1.6-1.7-3.8-2.3-6.5-2.3v13.6c2.7 0 4.9.6 6.5 2.3 1.6-1.7 3.8-2.3 6.5-2.3V4.2c-2.7 0-4.9.6-6.5 2.3Z"/><path d="M12 6.5v13.6"/></svg>
+          <span>指南</span>
+        </button>
         <button class="nav-item" data-page="settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.1"/><circle cx="10" cy="17" r="2.1"/></svg>
           <span>设置</span>
@@ -137,6 +141,7 @@
               <div class="tl-head">
                 <input id="thread-search" placeholder="搜索会话、议题、人…" />
                 <button class="btn sm" id="btn-new-issue">＋ 新任务</button>
+                <button class="btn ghost sm" id="btn-resync" title="重置读取基线，接收现有开放议题">接收已有议题</button>
                 <div class="seg" id="thread-filter">
                   <button class="on" data-f="subscribed">活跃</button>
                   <button data-f="recent">最近</button>
@@ -259,8 +264,8 @@
             <div class="step" data-step="login">
               <div class="step-num">2</div>
               <div class="step-body">
-                <div class="step-title">在浏览器里登录 GitHub</div>
-                <div class="step-desc">点一下，浏览器会打开授权页；输入下面的一次性代码即可，不需要在终端里粘贴 token。</div>
+                <div class="step-title">登录 agent 专用账号</div>
+                <div class="step-desc">没有就先去 GitHub 注册一个（免费，如 xxx-agent）。值守以它的身份干活、开 PR；它不能和你派活用的是同一个账号——bundle 会忽略 agent 自己发的消息。</div>
                 <div class="step-state" id="login-state">未登录</div>
                 <div class="device" id="device" hidden>
                   <span class="device-code" id="device-code">XXXX-XXXX</span>
@@ -299,18 +304,35 @@
             <div class="step" data-step="people">
               <div class="step-num">4</div>
               <div class="step-body">
-                <div class="step-title">谁能给你派活</div>
-                <div class="step-desc">只认这些人发的指令；留空等于谁都不能派活。</div>
+                <div class="step-title">谁能派活 + 发单人登录</div>
+                <div class="step-desc">只认这些人发的指令；留空等于谁都不能派活。填你自己的主账号，然后点「发单人登录」——会话页开议题、回帖都以它的身份发出。</div>
                 <div class="step-state" id="people-state">—</div>
                 <div class="repo-pick">
                   <input id="allowed-input" placeholder="GitHub 登录名，逗号分隔" />
+                  <button class="btn ghost sm" id="btn-poster-login">发单人登录</button>
+                </div>
+                <div class="step-state" id="poster-state"></div>
+              </div>
+            </div>
+
+            <!-- step 5 : collaborator -->
+            <div class="step" data-step="collab">
+              <div class="step-num">5</div>
+              <div class="step-body">
+                <div class="step-title">给 agent 加协作者（Write）</div>
+                <div class="step-desc">agent 要能推分支、开 PR，必须在这个仓库有 Write 权限。用发单人（owner）身份一键邀请；邀请发出后，用 agent 账号在 GitHub 通知里接受。</div>
+                <div class="step-state" id="collab-state">待检测</div>
+                <div class="step-actions">
+                  <button class="btn ghost sm" id="btn-collab-check">检测权限</button>
+                  <button class="btn sm" id="btn-collab-invite">发送 Write 邀请</button>
+                  <button class="btn ghost sm" id="btn-collab-accept">打开接受邀请页</button>
                 </div>
               </div>
             </div>
 
-            <!-- step 5 : apply -->
+            <!-- step 6 : apply -->
             <div class="step" data-step="apply">
-              <div class="step-num">5</div>
+              <div class="step-num">6</div>
               <div class="step-body">
                 <div class="step-title">保存并自检</div>
                 <div class="step-desc">写入 Source → Policy → Execution 三块配置，然后让 bundle 重新检查。</div>
@@ -319,6 +341,71 @@
                   <button class="btn" id="btn-apply">保存并自检</button>
                   <button class="btn ghost" id="btn-recheck">重新检查</button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 指南 -->
+        <section class="page" data-page="guide">
+          <div class="guide">
+            <div class="card guide-hero">
+              <div class="kicker">刚下载？五分钟跑通</div>
+              <h2>SuperAgent 是一个仓库值守 agent</h2>
+              <p>你在 GitHub 议题里 @ 它派活，它按策略判断后开工单：独立目录里改代码、跑验证、开 PR，再回到原议题向你汇报。指挥台是它的桌面入口；「进化」页让它从每次工单结果里自动学习。</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>第 1 步 · 准备两个账号</span><em>一次性</em></div>
+              <div class="guide-body">
+                <p><b>你的主账号</b>：派活的人（仓库 owner）。<b>agent 专用账号</b>：免费注册一个（如 <code>xxx-agent</code>），值守以它干活。</p>
+                <p class="why">为什么不能共用？bundle 会忽略 agent 自己发的议题/评论（防自我循环），且 bot 消息不算派活。一个 agent 账号可以服务任意多个仓库——多项目不需要多账号。</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>第 2 步 · 接入向导</span><button class="link" data-goto="connect">去接入 →</button></div>
+              <div class="guide-body">
+                <p>① gh 命令行（自动找/装）→ ② 登录 <b>agent 账号</b> → ③ 选仓库 → ④ 填授权人（你的主账号）并<b>发单人登录</b> → ⑤ <b>加协作者</b>：一键发 Write 邀请，agent 接受 → ⑥ 保存并自检。</p>
+                <p class="why">协作者必须是 Write：agent 要推分支、开 PR。邀请发出后记得用 agent 账号在 GitHub 通知里接受。</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>第 3 步 · 派第一单</span><button class="link" data-goto="threads">去会话 →</button></div>
+              <div class="guide-body">
+                <p>会话页「＋ 新任务」：以你的主账号开议题并自动 @ agent。写<b>明确、范围小</b>的请求，例如「把 README 第 3 行的 xx 改成 yy」。默认策略放行文案/局部样式类小改；大功能会被拒绝或只观察——这是安全边界，不是故障。</p>
+                <p class="why">值守每 60 秒轮询一次。之前开的旧议题没被接收？点会话页「接收已有议题」重置读取基线。</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>第 4 步 · 看它干活</span><button class="link" data-goto="tickets">去工单 →</button></div>
+              <div class="guide-body">
+                <p>工单页看阶段/执行器/产出，可重试、停止；会话页看它回议题的汇报；它开的 PR 在仓库里等你评审合并。合并或失败都会成为「进化」页的经验。</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>第 5 步 · 让它进化</span><button class="link" data-goto="evolution">去进化 →</button></div>
+              <div class="guide-body">
+                <p>工单结束后自动积累经验；失败聚类/高重试率会变成提示词教训、新技能或并发提案，经校验应用、用后续成功率裁决——改善保留、退化自动回滚。不放心可关「自动应用」，逐张批准。</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>多项目并行</span><em>一个 agent 账号够</em></div>
+              <div class="guide-body">
+                <p>每个实例盯一个仓库。同机再开一个实例：<code>set SUPERAGENT_PORT=3083</code> + <code>set SUPERAGENT_HOME=…\.dsh-b</code> 后启动 exe，登录同一个 agent、选另一个仓库即可。同一仓库别跑两个实例。</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><span>常见问题</span></div>
+              <div class="guide-body">
+                <p><b>派活了没反应？</b> 检查：授权人里有派活账号吗？协作者接受邀请了吗？接入页第 6 步自检绿了吗？旧议题点「接收已有议题」。</p>
+                <p><b>它拒绝了我的请求？</b> 默认策略只放行小改；把请求写具体、或按仓库需要在引擎页调整 Policy 规则。</p>
+                <p><b>数据在哪？</b> 配置/登录/进化数据：<code>%APPDATA%\superagent-win\</code>；引擎状态：<code>%USERPROFILE%\.dsh\</code>。</p>
               </div>
             </div>
           </div>

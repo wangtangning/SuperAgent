@@ -15,7 +15,8 @@ const PAGE_META = {
   threads: ['会话', '人和 agent 的同一个入口'],
   tickets: ['工单', '每个工单一个执行器、一个目录、一份产出'],
   evolution: ['进化', '从运行经验里学习：提案 → 应用 → 试用 → 保留/回滚'],
-  connect: ['接入', 'GitHub：环境 → 账号 → 仓库 → 授权人 → 自检'],
+  connect: ['接入', 'GitHub：环境 → agent 账号 → 仓库 → 授权人 → 协作者 → 自检'],
+  guide: ['指南', '刚下载？五分钟跑通：账号 → 接入 → 派活 → 进化'],
   settings: ['设置', '执行器、宿主路径与日志'],
   engine: ['引擎', 'DeepSeek Harness 原生界面（高级）']
 };
@@ -674,6 +675,9 @@ async function refreshGithub() {
   try {
     gh = await host.ghStatus();
   } catch { gh = (state && state.github) || null; }
+  if (gh && state && state.config && state.config.repository && gh.posterLogin) {
+    try { gh.collab = await host.collabStatus(); } catch {}
+  }
   renderGitHub(gh);
   if (gh && gh.auth && gh.auth.pending && !ghPollTimer) {
     ghPollTimer = setInterval(async () => {
@@ -726,12 +730,24 @@ function renderGitHub(g) {
   $('repo-state').textContent = repo ? repo : pending ? '等待 GitHub 授权' : login ? '选择一个仓库' : '先登录';
   $('repo-state').className = 'step-state ' + (repo ? 'ok' : pending || login ? 'warn' : '');
 
-  // step 4：授权人
+  // step 4：授权人 + 发单人
   const allowed = (state && state.config && state.config.allowed) || [];
   const allowedInput = $('allowed-input');
   if (allowedInput && document.activeElement !== allowedInput) allowedInput.value = allowed.join(', ');
   $('people-state').textContent = allowed.length ? `${allowed.length} 人可派活` : '未设置（谁都不能派活）';
   $('people-state').className = 'step-state ' + (allowed.length ? 'ok' : 'warn');
+  const poster = g.posterLogin || '';
+  $('poster-state').textContent = poster ? `发单人：@${poster} ✓` : '发单人未登录（会话页开议题/回帖需要）';
+  $('poster-state').className = 'step-state ' + (poster ? 'ok' : 'warn');
+
+  // step 5：协作者
+  const collab = g.collab || null;
+  const collabOk = collab && collab.ok && /write|admin|maintain/i.test(collab.permission || '');
+  $('collab-state').textContent = collab
+    ? (collab.ok ? `@${collab.agent} 权限：${collab.permission}${collabOk ? ' ✓' : '（需要 Write）'}` : collab.error)
+    : '待检测';
+  $('collab-state').className = 'step-state ' + (collabOk ? 'ok' : collab ? 'warn' : '');
+  $('btn-collab-invite').hidden = !!collabOk;
 
   // step 5：选中但未保存时给出明确状态，避免「选了却像没选」
   const picked = ($('repo-input').value || '').trim();
@@ -742,7 +758,7 @@ function renderGitHub(g) {
 
   // 步骤高亮
   const setupOk = !!(state && state.state && state.state.setup && !state.state.setup.problem);
-  const doneMap = { cli: cliDone, login: !!login, repo: !!repo, people: allowed.length > 0, apply: setupOk };
+  const doneMap = { cli: cliDone, login: !!login, repo: !!repo, people: allowed.length > 0 && !!poster, collab: !!collabOk, apply: setupOk };
   let activeAssigned = false;
   document.querySelectorAll('.step').forEach((s) => {
     const done = !!doneMap[s.dataset.step];
@@ -888,6 +904,32 @@ document.addEventListener('click', async (e) => {
   if (id === 'btn-new-issue') return openIssueModal();
   if (id === 'btn-issue-cancel') { $('issue-modal').hidden = true; return; }
   if (id === 'btn-issue-submit') return submitIssue();
+  if (id === 'btn-resync') {
+    toast('重置读取基线…');
+    try { const r = await host.resyncIssues(); toast(r.ok ? '已重置：现有开放议题将在下一轮被接收' : r.error); setTimeout(() => refreshThreads(), 4000); }
+    catch (e) { toast(e.message); }
+    return;
+  }
+
+  // 接入：发单人 / 协作者
+  if (id === 'btn-poster-login') { await host.ghLoginStart(); renderGitHub(await host.ghStatus()); toast('浏览器已打开：用授权人（主）账号授权'); return; }
+  if (id === 'btn-collab-check') {
+    try { gh.collab = await host.collabStatus(); renderGitHub(gh); toast(gh.collab.ok ? `权限：${gh.collab.permission}` : gh.collab.error); } catch (e) { toast(e.message); }
+    return;
+  }
+  if (id === 'btn-collab-invite') {
+    try {
+      const r = await host.collabInvite();
+      if (!r.ok) throw new Error(r.error);
+      toast('邀请已发出：用 agent 账号在 GitHub 接受');
+      gh.collab = await host.collabStatus(); renderGitHub(gh);
+    } catch (e) { toast(e.message); }
+    return;
+  }
+  if (id === 'btn-collab-accept') {
+    const repo = (state && state.config && state.config.repository) || '';
+    return host.openExternal(`https://github.com/${repo}/invitations`);
+  }
 
   // GitHub
   if (id === 'btn-install-gh') {

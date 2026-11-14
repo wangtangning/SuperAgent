@@ -968,6 +968,75 @@ async function logoutGithub() {
   return { ok: true };
 }
 
+/* 协作者授权：检测 agent 对仓库的权限；用发单人身份发 Write 邀请。 */
+async function collabStatus() {
+  const repo = String(config.repository || '').trim();
+  const agent = agentLogin || gh.auth.login || '';
+  if (!repo || !agent) return { ok: false, error: '先选仓库并登录 agent' };
+  if (!posterToken) return { ok: false, error: '需要发单人登录（仓库 owner）才能检测/邀请' };
+  try {
+    const res = await net.fetch(`https://api.github.com/repos/${repo}/collaborators/${agent}/permission`, {
+      headers: { 'User-Agent': 'SuperAgent', accept: 'application/vnd.github+json', authorization: `Bearer ${posterToken}` }
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: `GitHub ${res.status}: ${j.message || ''}`.slice(0, 200) };
+    return { ok: true, permission: j.permission, agent, repo };
+  } catch (e) { return { ok: false, error: e.message.slice(0, 200) }; }
+}
+
+async function collabInvite() {
+  const repo = String(config.repository || '').trim();
+  const agent = agentLogin || gh.auth.login || '';
+  if (!repo || !agent) return { ok: false, error: '先选仓库并登录 agent' };
+  if (!posterToken) return { ok: false, error: '需要发单人登录（仓库 owner）才能发邀请' };
+  try {
+    const res = await net.fetch(`https://api.github.com/repos/${repo}/collaborators/${agent}`, {
+      method: 'PUT',
+      headers: { 'User-Agent': 'SuperAgent', accept: 'application/vnd.github+json', authorization: `Bearer ${posterToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ permission: 'push' })
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: `GitHub ${res.status}: ${j.message || ''}`.slice(0, 200) };
+    log(`已向 @${agent} 发出 ${repo} 的 Write 协作者邀请`);
+    return { ok: true, state: j.state || 'invited', url: j.html_url || `https://github.com/${repo}/invitations` };
+  } catch (e) { return { ok: false, error: e.message.slice(0, 200) }; }
+}
+
+/** 接收已有议题：bundle 的读取基线（github-since / 观察流 started）只往前走，
+ *  开关观察流不会重置。这里停引擎 → 把基线回拨 → 起引擎，让现有开放议题进入接收范围。 */
+async function resyncIssues() {
+  const back = new Date(Date.now() - 7 * 86400000).toISOString();
+  const wasRunning = phase === 'running';
+  if (wasRunning) await stop();
+  try {
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(path.join(STATE_DIR, 'orchestrator.sqlite'));
+    db.prepare('UPDATE kv SET value = ? WHERE key = ?').run(JSON.stringify(back), 'github-since');
+    for (const k of ['github-stream:issues', 'github-stream:comments', 'github-stream:review-comments']) {
+      const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(k);
+      if (!row) continue;
+      try {
+        const v = JSON.parse(row.value);
+        v.since = back;
+        if (v.started) for (const kind of Object.keys(v.started)) v.started[kind] = back;
+        delete v.etag;
+        db.prepare('UPDATE kv SET value = ? WHERE key = ?').run(JSON.stringify(v), k);
+      } catch {}
+    }
+    db.close();
+    log('已回拨议题读取基线 7 天：现有开放议题将被接收');
+  } catch (e) {
+    log('重置读取基线失败：' + e.message, 'error');
+    if (wasRunning) await start();
+    return { ok: false, error: e.message };
+  }
+  if (wasRunning) {
+    const r = await start();
+    return { ok: !!r.ok, error: r.error };
+  }
+  return { ok: true };
+}
+
 /** 在会话页直接派活：以发单人身份开议题并 @ agent。 */
 async function createIssue(title, body) {
   const repo = String(config.repository || '').trim();
@@ -1163,6 +1232,9 @@ ipcMain.handle('gh:logout', () => logoutGithub());
 ipcMain.handle('gh:openAuth', (_e, uri) => shell.openExternal(uri));
 ipcMain.handle('thread:comment', (_e, { url, text }) => postComment(url, text));
 ipcMain.handle('issue:create', (_e, { title, body }) => createIssue(title, body));
+ipcMain.handle('collab:status', () => collabStatus());
+ipcMain.handle('collab:invite', () => collabInvite());
+ipcMain.handle('issues:resync', () => resyncIssues());
 
 /* 自我进化：全部走引擎，UI 只读快照 / 触发动作 */
 ipcMain.handle('evolution:get', () => ensureEvolution().snapshot());

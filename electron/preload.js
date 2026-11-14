@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('host', {
   openAuth: (uri) => ipcRenderer.invoke('gh:openAuth', uri),
   comment: (url, text) => ipcRenderer.invoke('thread:comment', { url, text }),
   createIssue: (title, body) => ipcRenderer.invoke('issue:create', { title, body }),
+  collabStatus: () => ipcRenderer.invoke('collab:status'),
+  collabInvite: () => ipcRenderer.invoke('collab:invite'),
+  resyncIssues: () => ipcRenderer.invoke('issues:resync'),
 
   evolutionGet: () => ipcRenderer.invoke('evolution:get'),
   evolutionRun: () => ipcRenderer.invoke('evolution:run'),
