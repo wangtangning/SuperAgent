@@ -573,6 +573,7 @@ function renderSsh(s) {
       <div class="ssh-pub mono" title="公钥：贴到 GitHub / 服务器 authorized_keys">${esc(k.publicKey)}</div>
       <div class="pa-btns">
         <button class="btn ghost sm" data-ssh-act="copy" data-ssh-id="${esc(k.id)}">复制公钥</button>
+        <button class="btn ghost sm" data-ssh-act="register" data-ssh-id="${esc(k.id)}">登记到 agent GitHub</button>
         ${on
           ? '<button class="btn ghost sm" data-ssh-act="unassign" data-ssh-id="' + esc(k.id) + '">取消分配</button>'
           : '<button class="btn sm" data-ssh-act="assign" data-ssh-id="' + esc(k.id) + '">分配给 agent</button>'}
@@ -586,6 +587,11 @@ async function sshAction(act, id) {
   const key = ssh && ssh.keys.find((k) => k.id === id);
   try {
     if (act === 'copy') { await navigator.clipboard.writeText(key.publicKey); toast('公钥已复制'); return; }
+    if (act === 'register') {
+      const r = await host.sshRegisterGithub(id);
+      toast(r.ok ? '公钥已登记到 agent 的 GitHub' : r.error);
+      return;
+    }
     if (act === 'remove') { await host.sshRemove(id); toast('已删除'); }
     if (act === 'assign') { toast('分配中，引擎会重启以注入密钥…'); await host.sshAssign(id); toast('已分配给 agent'); }
     if (act === 'unassign') { await host.sshUnassign(); toast('已取消分配'); }

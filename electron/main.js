@@ -1270,6 +1270,24 @@ ipcMain.handle('ssh:unassign', async () => {
   return r;
 });
 ipcMain.handle('ssh:test', (_e, target) => ensureSsh().test(target));
+// 把库里某把密钥的公钥登记到 agent 的 GitHub 账号（用 agent token）
+ipcMain.handle('ssh:registerGithub', async (_e, id) => {
+  const vault = ensureSsh();
+  const key = vault.list().keys.find((k) => k.id === id);
+  if (!key) return { ok: false, error: '密钥不存在' };
+  if (!agentToken) return { ok: false, error: 'agent 未登录' };
+  try {
+    const res = await net.fetch('https://api.github.com/user/keys', {
+      method: 'POST',
+      headers: { 'User-Agent': 'SuperAgent', accept: 'application/vnd.github+json', authorization: `Bearer ${agentToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ title: `superagent-${key.name}`, key: key.publicKey })
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: `GitHub ${res.status}: ${j.message || ''}`.slice(0, 200) };
+    log(`[ssh] 公钥已登记到 agent GitHub：${key.name}`);
+    return { ok: true, id: j.id };
+  } catch (e) { return { ok: false, error: e.message.slice(0, 200) }; }
+});
 
 /* 自我进化：全部走引擎，UI 只读快照 / 触发动作 */
 ipcMain.handle('evolution:get', () => ensureEvolution().snapshot());

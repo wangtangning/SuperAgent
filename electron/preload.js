@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('host', {
   sshAssign: (id) => ipcRenderer.invoke('ssh:assign', id),
   sshUnassign: () => ipcRenderer.invoke('ssh:unassign'),
   sshTest: (target) => ipcRenderer.invoke('ssh:test', target),
+  sshRegisterGithub: (id) => ipcRenderer.invoke('ssh:registerGithub', id),
   onSsh: (cb) => { ipcRenderer.on('ssh:update', (_e, s) => cb(s)); },
 
   evolutionGet: () => ipcRenderer.invoke('evolution:get'),

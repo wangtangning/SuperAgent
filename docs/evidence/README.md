@@ -90,3 +90,10 @@ README.md             进化章节与目录更新
 - 接入向导第 5 步：协作者权限检测 + 一键 Write 邀请 + 接受邀请入口
 - 会话页「接收已有议题」：停引擎→回拨 github-since 与观察流基线 7 天→起引擎，
   解决 bundle「不读开关之前旧消息」导致旧议题不被接收的问题
+
+## 8. SSH 密钥库与等人行动条（2026-11-14 追加）
+
+- test/ssh-vault.test.js 5/5：生成/加密落盘/分配注入/导入/删除/试连
+- 全套 npm test 15/15
+- 实机：密钥页生成→分配→GIT_SSH_COMMAND 注入→连接测试（见 shots/23-ssh.png）
+- 工单 person/review 显示「等你评审合并」+ 打开 PR 按钮（shots/24-person-action.png）
