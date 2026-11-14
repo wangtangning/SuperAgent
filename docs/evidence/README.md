@@ -97,3 +97,9 @@ README.md             进化章节与目录更新
 - 全套 npm test 15/15
 - 实机：密钥页生成→分配→GIT_SSH_COMMAND 注入→连接测试（见 shots/23-ssh.png）
 - 工单 person/review 显示「等你评审合并」+ 打开 PR 按钮（shots/24-person-action.png）
+
+## 9. 评审 agent 与服务器库实机（2026-11-14 追加）
+
+- 服务器库：入库/分配/凭据文件/lan 助手/技能同步（rev 9，含清单不含密码）实机通过
+- 评审 agent：默认复用引擎 DeepSeek key（usingEngineKey=true）；议题 #3 端到端见 review-live.log
+- 修复：apiPut prompts body 形状、概览决策 reason 渲染、技能同步补偿

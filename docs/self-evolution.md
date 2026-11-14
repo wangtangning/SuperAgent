@@ -136,3 +136,16 @@ bundle 侧的证据在它的 prompt revision 历史里（「引擎」页或 `GET
 `electron/main.js` 只做三件事：注入 API 适配器（apiGet/apiPut/apiPost）、
 定时 tick、把引擎快照推给「进化」页。引擎本身不依赖 Electron——
 `EvolutionEngine({ api, store })` 在任何 Node 环境都能跑，这也是测试能离线闭环的原因。
+## 评审 agent（person/review 自动化）
+
+工单进入「等人评审」后，评审 agent（`electron/review-agent.js`，45s 一轮）自动处理：
+
+1. 拉 PR 元数据 + diff；
+2. **硬检查先行**：冲突 / 敏感路径（workflows、凭据、.env、密钥文件）/ 过大 → 不自动合并；
+3. LLM 判定：默认**复用引擎已有的 DeepSeek key**（`~/.dsh/.credentials.yaml` 的
+   `DEEPSEEK_API_KEY`），设置页可覆盖；LLM 失败回退启发式（小且聚焦、与请求相关）；
+4. approve → 以**发单人**身份 squash 合并（工单随后 merged 结束，进入进化经验）；
+   request_changes → 以发单人身份留评审意见，worker 收到反馈继续改；
+   uncertain → 不动，留给人（工单页行动条）。
+
+开关与配置在设置页「评审 agent」卡；`review:run` 可立即评审一轮。
